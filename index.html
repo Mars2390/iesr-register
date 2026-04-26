@@ -3196,12 +3196,12 @@
         </svg>
         <div class="splash-logo-inner"><i class="fas fa-graduation-cap"></i></div>
       </div>
-      <div class="splash-title">IESR</div>
-      <div class="splash-subtitle">Intelligent Electronic School Register</div>
+      <div class="splash-title" id="splashTitle">IESR</div>
+      <div class="splash-subtitle" id="splashSubtitle">Intelligent Electronic School Register</div>
       <div class="splash-bar-track"><div class="splash-bar-fill" id="splashBarFill"></div></div>
       <div class="splash-status" id="splashStatus">Initializing system...</div>
     </div>
-    <div class="splash-version">IESR v2026 · ELECTRICAL DEPARTMENT · SECURE</div>
+    <div class="splash-version" id="splashVersionLine">IESR v2026 · ELECTRICAL DEPARTMENT · SECURE</div>
   </div>
 
   <!-- =================== ROLE SELECTOR =================== -->
@@ -3295,7 +3295,7 @@
       <div class="parent-brand">
         <div class="parent-brand-icon"><i class="fas fa-graduation-cap"></i></div>
         <div>
-          <h1>IESR PARENT MONITOR</h1>
+          <h1 id="parentPortalTitle">IESR PARENT MONITOR</h1>
           <span>ATTENDANCE TRACKING SYSTEM</span>
         </div>
       </div>
@@ -3382,14 +3382,14 @@
           <i class="fas fa-graduation-cap"></i>
         </div>
         <div class="logo-text">
-          <h1>IESR</h1>
-          <p>Intelligent Electronic School Register</p>
+          <h1 id="welcomeLogoTitle">IESR</h1>
+          <p id="welcomeLogoSubtitle">Intelligent Electronic School Register</p>
         </div>
       </div>
       
       <div class="welcome-content">
-        <h2>Welcome to<br>IESR 2026 ELECTRICAL REGISTER</h2>
-        <p>Complete attendance management for Craft Certificate and Diploma in Electrical Engineering. Secure, efficient and intelligent with cloud sync.</p>
+        <h2 id="welcomeHeadline">Welcome to<br>IESR 2026 ELECTRICAL REGISTER</h2>
+        <p id="welcomeBlurb">Complete attendance management for Craft Certificate and Diploma in Electrical Engineering. Secure, efficient and intelligent with cloud sync.</p>
         
         <div class="features">
           <div class="feature">
@@ -3419,14 +3419,14 @@
         </div>
       </div>
       
-      <div class="copyright">
+      <div class="copyright" id="copyrightLine">
         © 2026 IESR — Electrical Department • Craft & Diploma Programs • AI-Powered Insights
       </div>
     </div>
     
     <div class="login-panel">
       <div class="login-header">
-        <h3>Access Electrical Register</h3>
+        <h3 id="loginPanelHeading">Access Electrical Register</h3>
         <p>Select class to continue</p>
       </div>
       
@@ -3550,12 +3550,14 @@
           <button id="addStudentBtn" class="btn-primary">Add Student</button>
           <button id="editStudentBtn" class="muted-btn">Edit Selected</button>
           <button id="deleteStudentBtn" class="muted-btn">Delete Selected</button>
+          <button id="importCsvBtn" class="muted-btn"><i class="fas fa-file-csv"></i> Import CSV</button>
+          <button id="manageTeachersBtn" class="muted-btn"><i class="fas fa-chalkboard-teacher"></i> Manage Teachers</button>
         </div>
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-          <!-- PERMANENT ADMIN ID SENDER - FIXED 9209 (NO LONGER REQUIRES INPUT) -->
-          <input type="hidden" id="adminIdInput" value="9209" />
-          <span class="small" style="background:#e6f3ff; padding:5px 10px; border-radius:20px; font-weight:600">
-            <i class="fas fa-key"></i> Submission Code: 9209
+          <!-- Submission code is sent automatically with each submission;
+               its value is managed via PinManager (window.setSubmissionCode). -->
+          <span class="small" style="background:#e6f3ff; padding:5px 10px; border-radius:20px; font-weight:600" title="Configured via admin panel">
+            <i class="fas fa-key"></i> Auto-submit
           </span>
           <button id="sendToAdminBtn" class="muted-btn">Send to Admin</button>
           <button id="viewAdminBtn" class="muted-btn">View Admin Submissions</button>
@@ -3709,7 +3711,7 @@
       </div>
     </div>
     
-    <!-- Admin PIN Verification Modal (UPDATED for 2003) -->
+    <!-- Admin PIN Verification Modal -->
     <div id="adminPinModal" class="modal-backdrop double-verify-modal" style="display:none">
       <div class="modal">
         <h3 id="adminPinTitle">Admin Verification Required</h3>
@@ -3817,6 +3819,280 @@
   </div>
 
   <script>
+    // ===================== TENANT CONFIG (Stage 1) =====================
+    // Identity, branding, and backend URL for this deployment.
+    //   - Override per tenant by writing a JSON object (any subset of
+    //     CONFIG_DEFAULTS keys) to localStorage['iesr_tenant_config_v1'].
+    //   - Override the Sheet URL via localStorage['iesr_tenant_sheet_url_v1']
+    //     or by calling window.setSheetUrl(url) at runtime.
+    // Defaults preserve original IESR behavior, so the existing deployment
+    // sees no rebrand and no behavior change.
+    const CONFIG_DEFAULTS = Object.freeze({
+      schoolName: 'IESR',
+      schoolFullName: 'Intelligent Electronic School Register',
+      departmentName: 'ELECTRICAL DEPARTMENT',
+      year: '2026',
+      // Standalone display strings (each is shown verbatim in the UI; rebranding
+      // tenants override them directly rather than composing from the parts above)
+      copyrightLine: '© 2026 IESR — Electrical Department • Craft & Diploma Programs • AI-Powered Insights',
+      welcomeHeadline: 'Welcome to<br>IESR 2026 ELECTRICAL REGISTER',
+      welcomeBlurb: 'Complete attendance management for Craft Certificate and Diploma in Electrical Engineering. Secure, efficient and intelligent with cloud sync.',
+      loginPanelHeading: 'Access Electrical Register',
+      parentPortalTitle: 'IESR PARENT MONITOR',
+      splashVersionLine: 'IESR v2026 · ELECTRICAL DEPARTMENT · SECURE',
+      classBrandPrefix: 'IESR',         // rendered as `${prefix} — ${currentClass}`
+      registerBrandPrefix: 'IESR',      // rendered as `${prefix} — ${currentClass} REGISTER`
+      // Backend
+      defaultSheetUrl: 'https://script.google.com/macros/s/AKfycbxolIUza94tkFL5u0ejiBbFfZ6bmsbe2sSId1WsKJHOK6g3DR7Glmf5UuZUIeJ8nD_Hmw/exec',
+      // When true, prompt for a Sheet URL on first run if none is stored and
+      // no defaultSheetUrl is set. Set false for single-tenant deployments.
+      multiTenant: true,
+      // Legacy PIN seed values, used ONLY on first boot when no PINs are
+      // stored. After first boot they migrate into hashed storage and the
+      // admin should change them via window.setAdminPin / setGlobalAdminPin /
+      // setSubmissionCode (admin panel UI lands in a later stage).
+      // Set keys to null for fresh installs that should require setup.
+      legacyPins: {
+        admin: '2003',
+        globalAdmin: '13030',
+        submissionCode: '9209',
+      },
+    });
+
+    const TENANT_CONFIG_KEY = 'iesr_tenant_config_v1';
+    const TENANT_SHEET_URL_KEY = 'iesr_tenant_sheet_url_v1';
+
+    function loadTenantOverrides() {
+      try {
+        const raw = localStorage.getItem(TENANT_CONFIG_KEY);
+        if (!raw) return {};
+        const parsed = JSON.parse(raw);
+        return (parsed && typeof parsed === 'object') ? parsed : {};
+      } catch (e) {
+        console.warn('[CONFIG] tenant overrides unreadable, using defaults:', e);
+        return {};
+      }
+    }
+
+    const CONFIG = Object.assign({}, CONFIG_DEFAULTS, loadTenantOverrides());
+
+    // Tenant Sheet URL resolver.
+    // Order: stored override -> CONFIG.defaultSheetUrl -> prompt (only if multiTenant).
+    function resolveSheetUrl() {
+      let stored = '';
+      try { stored = localStorage.getItem(TENANT_SHEET_URL_KEY) || ''; } catch (e) {}
+      if (stored) return stored;
+      if (CONFIG.defaultSheetUrl) return CONFIG.defaultSheetUrl;
+      if (CONFIG.multiTenant && typeof window !== 'undefined' && typeof window.prompt === 'function') {
+        const url = (window.prompt(
+          'Welcome! Paste your Google Apps Script Web App URL to connect this register to your school’s spreadsheet.\n(You can change this later in admin settings.)'
+        ) || '').trim();
+        if (url) {
+          try { localStorage.setItem(TENANT_SHEET_URL_KEY, url); } catch (e) {}
+          return url;
+        }
+      }
+      return '';
+    }
+
+    // Public helper exposed for the future admin panel.
+    window.setSheetUrl = function(url) {
+      url = (url || '').trim();
+      try {
+        if (url) localStorage.setItem(TENANT_SHEET_URL_KEY, url);
+        else localStorage.removeItem(TENANT_SHEET_URL_KEY);
+      } catch (e) {}
+      alert('Sheet URL updated. Reload the page for the change to take effect.');
+    };
+
+    // Apply tenant identity to the DOM. Safe to call multiple times and on
+    // partial DOM (missing elements are skipped).
+    function applyBranding() {
+      const setText = (id, value) => {
+        const el = document.getElementById(id);
+        if (el && value != null) el.textContent = value;
+      };
+      const setHTML = (id, value) => {
+        const el = document.getElementById(id);
+        if (el && value != null) el.innerHTML = value;
+      };
+      document.title = CONFIG.schoolName + ' — ' + CONFIG.schoolFullName;
+      setText('splashTitle', CONFIG.schoolName);
+      setText('splashSubtitle', CONFIG.schoolFullName);
+      setText('splashVersionLine', CONFIG.splashVersionLine);
+      setText('parentPortalTitle', CONFIG.parentPortalTitle);
+      setText('welcomeLogoTitle', CONFIG.schoolName);
+      setText('welcomeLogoSubtitle', CONFIG.schoolFullName);
+      setHTML('welcomeHeadline', CONFIG.welcomeHeadline);
+      setText('welcomeBlurb', CONFIG.welcomeBlurb);
+      setText('loginPanelHeading', CONFIG.loginPanelHeading);
+      setText('copyrightLine', CONFIG.copyrightLine);
+    }
+    applyBranding();
+    document.addEventListener('DOMContentLoaded', applyBranding);
+    // =================== END TENANT CONFIG ===================
+
+    // ===================== PIN MANAGER (Stage 2) =====================
+    // PBKDF2-HMAC-SHA256, 100k iterations, per-slot 16-byte salt.
+    // Three slots:
+    //   - admin       (cryptographic; verified locally)
+    //   - globalAdmin (cryptographic; verified locally)
+    //   - submissionCode (PLAINTEXT; sent to the backend with attendance
+    //     submissions, so it must be retrievable in cleartext on the client)
+    // First boot migrates CONFIG.legacyPins into hashed storage (mode='legacy')
+    // so existing deployments keep working without intervention.
+    const PinManager = (() => {
+      const STORAGE_KEY = 'iesr_pins_v1';
+      const ITERATIONS = 100000;
+      let state = null;
+      let initPromise = null;
+
+      async function init() {
+        let stored = null;
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (raw) stored = JSON.parse(raw);
+        } catch (e) { stored = null; }
+
+        if (stored && typeof stored === 'object'
+            && stored.admin && stored.admin.hash && stored.admin.salt) {
+          return Object.assign({ mode: stored.mode || 'configured' }, stored);
+        }
+
+        const legacy = (CONFIG && CONFIG.legacyPins) || {};
+        if (legacy.admin && legacy.globalAdmin) {
+          const adminSalt = randomSaltHex();
+          const globalSalt = randomSaltHex();
+          const next = {
+            admin: { hash: await pbkdf2(legacy.admin, adminSalt), salt: adminSalt, iterations: ITERATIONS },
+            globalAdmin: { hash: await pbkdf2(legacy.globalAdmin, globalSalt), salt: globalSalt, iterations: ITERATIONS },
+            submissionCode: legacy.submissionCode || '',
+            mode: 'legacy',
+            createdAt: new Date().toISOString(),
+          };
+          try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch (e) {}
+          console.warn('[PinManager] First-boot migration from legacyPins complete. Admin should change PINs via setAdminPin/setGlobalAdminPin/setSubmissionCode.');
+          return next;
+        }
+
+        return { admin: null, globalAdmin: null, submissionCode: '', mode: 'unconfigured' };
+      }
+
+      function ready() {
+        if (!initPromise) {
+          initPromise = init().then(s => { state = s; return s; });
+        }
+        return initPromise;
+      }
+
+      async function verify(slot, pin) {
+        if (slot !== 'admin' && slot !== 'globalAdmin') return false;
+        const s = await ready();
+        const slotData = s[slot];
+        if (!slotData || !slotData.hash || !slotData.salt) return false;
+        if (typeof pin !== 'string' || !pin) return false;
+        const computed = await pbkdf2(pin, slotData.salt, slotData.iterations || ITERATIONS);
+        return constantTimeEq(computed, slotData.hash);
+      }
+
+      async function setPin(slot, pin) {
+        if (slot !== 'admin' && slot !== 'globalAdmin') {
+          throw new Error('Invalid slot. Use "admin" or "globalAdmin".');
+        }
+        if (typeof pin !== 'string' || pin.trim().length < 3) {
+          throw new Error('PIN must be at least 3 characters.');
+        }
+        await ready();
+        const salt = randomSaltHex();
+        const hash = await pbkdf2(pin.trim(), salt);
+        state = Object.assign({}, state, {
+          [slot]: { hash, salt, iterations: ITERATIONS },
+          mode: 'configured',
+        });
+        persist();
+      }
+
+      async function setSubmissionCode(code) {
+        if (typeof code !== 'string' || !code.trim()) {
+          throw new Error('Submission code must be a non-empty string.');
+        }
+        await ready();
+        state = Object.assign({}, state, { submissionCode: code.trim() });
+        persist();
+      }
+
+      function getSubmissionCode() {
+        return (state && state.submissionCode) || '';
+      }
+      function getMode() {
+        return (state && state.mode) || 'unconfigured';
+      }
+
+      function persist() {
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+        catch (e) { console.warn('[PinManager] Could not persist PIN state:', e); }
+      }
+
+      // ----- crypto helpers -----
+      async function pbkdf2(pin, saltHex, iterations) {
+        iterations = iterations || ITERATIONS;
+        const enc = new TextEncoder();
+        const saltBytes = hexToBytes(saltHex);
+        const keyMaterial = await crypto.subtle.importKey(
+          'raw', enc.encode(pin), { name: 'PBKDF2' }, false, ['deriveBits']
+        );
+        const bits = await crypto.subtle.deriveBits(
+          { name: 'PBKDF2', salt: saltBytes, iterations: iterations, hash: 'SHA-256' },
+          keyMaterial, 256
+        );
+        return bytesToHex(new Uint8Array(bits));
+      }
+      function randomSaltHex() {
+        const b = new Uint8Array(16);
+        crypto.getRandomValues(b);
+        return bytesToHex(b);
+      }
+      function bytesToHex(bytes) {
+        return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+      }
+      function hexToBytes(hex) {
+        const out = new Uint8Array(hex.length / 2);
+        for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.substr(i*2, 2), 16);
+        return out;
+      }
+      function constantTimeEq(a, b) {
+        if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
+        let r = 0;
+        for (let i = 0; i < a.length; i++) r |= a.charCodeAt(i) ^ b.charCodeAt(i);
+        return r === 0;
+      }
+
+      // Eagerly kick off init so the first verify is fast and getSubmissionCode
+      // returns the real value by the time any submit can fire.
+      ready();
+
+      return { ready, verify, setPin, setSubmissionCode, getSubmissionCode, getMode };
+    })();
+
+    // Programmatic helpers for the future admin panel UI.
+    window.setAdminPin = function(pin) {
+      return PinManager.setPin('admin', pin)
+        .then(() => alert('Admin PIN updated.'))
+        .catch(e => alert('Failed to update Admin PIN: ' + e.message));
+    };
+    window.setGlobalAdminPin = function(pin) {
+      return PinManager.setPin('globalAdmin', pin)
+        .then(() => alert('Global Admin PIN updated.'))
+        .catch(e => alert('Failed to update Global Admin PIN: ' + e.message));
+    };
+    window.setSubmissionCode = function(code) {
+      return PinManager.setSubmissionCode(code)
+        .then(() => alert('Submission code updated.'))
+        .catch(e => alert('Failed to update submission code: ' + e.message));
+    };
+    window.PinManager = PinManager;
+    // =================== END PIN MANAGER ===================
+
     // ===== ENHANCED ENCRYPTION SYSTEM WITH SECURE HASHING =====
     class EncryptionSystem {
       // Original encryption/decryption for data
@@ -3865,15 +4141,15 @@
       }
     }
 
-    // ===== ADMIN PINS - UPDATED AS REQUESTED =====
-    const ADMIN_PINS = {
-      'hash_13030': EncryptionSystem.hashPin('13030'),  // GLOBAL ADMIN PIN - 13030 (UNIQUE)
-      'hash_2003': EncryptionSystem.hashPin('2003'),    // REGULAR ADMIN PIN - 2003 (NEW)
-      'hash_9209': EncryptionSystem.hashPin('9209')     // SUBMISSION CODE - 9209 (KEPT FOR COMPATIBILITY)
-    };
+    // ADMIN_PINS removed in Stage 2 — admin/globalAdmin/submissionCode are
+    // now managed by PinManager (PBKDF2-hashed, per-tenant, in localStorage).
+    // EncryptionSystem.hashPin remains in use only for legacy teacher PINs in
+    // CLASS_CONFIG below; that structure is replaced in Stage 4.
 
     // ===== GLOBAL CONSTANTS =====
-   const GOOGLE_SHEETS_URL = 'https://script.google.com/macros/s/AKfycbxolIUza94tkFL5u0ejiBbFfZ6bmsbe2sSId1WsKJHOK6g3DR7Glmf5UuZUIeJ8nD_Hmw/exec';
+    // Resolved from tenant config above. Use window.setSheetUrl(newUrl) to
+    // change the Sheet URL at runtime; reload required for it to take effect.
+    let GOOGLE_SHEETS_URL = resolveSheetUrl();
 
     // ===== INDEXEDDB STORAGE CLASS (UPDATED v4 — SESSION-AWARE UNIQUE KEY) =====
     class IndexedDBStorage {
@@ -4220,18 +4496,45 @@
 
           const transaction = this.db.transaction(['students'], 'readwrite');
           const store = transaction.objectStore('students');
+          let written = 0;
+          let skipped = 0;
 
           students.forEach(student => {
-            store.put({
-              admissionNo: student.Admission_No,
-              name: student.Student_Name,
-              class: student.Class,
+            const key = student && student.Admission_No;
+            // Skip records without a usable key — IndexedDB accepts any
+            // string (including admissions like '50090/CEEMAY2025R'), but
+            // null/undefined/empty/non-string values throw DataError and
+            // abort the whole transaction unless we filter them out.
+            if (typeof key !== 'string' || key === '') {
+              skipped++;
+              console.warn('[saveStudents] skipping student without valid Admission_No:', student);
+              return;
+            }
+            const req = store.put({
+              admissionNo: key,
+              name: student.Student_Name || '',
+              class: student.Class || '',
               updatedAt: new Date().toISOString()
             });
+            req.onsuccess = () => { written++; };
+            req.onerror = (e) => {
+              skipped++;
+              const errMsg = (e.target && e.target.error && e.target.error.message) || 'unknown';
+              console.warn('[saveStudents] put failed for ' + key + ':', errMsg);
+              // prevent the failure from aborting the transaction so other
+              // records still land
+              e.preventDefault();
+              e.stopPropagation();
+            };
           });
 
-          transaction.oncomplete = () => resolve();
-          transaction.onerror = (error) => reject(error);
+          transaction.oncomplete = () => {
+            if (skipped) console.warn(`[saveStudents] ${written} written, ${skipped} skipped`);
+            resolve();
+          };
+          transaction.onerror = (error) => {
+            reject(error && error.target ? error.target.error : error);
+          };
         });
       }
     }
@@ -4444,6 +4747,421 @@
         }
       }
     }
+
+    // ===================== SHEETS API (Stage 3) =====================
+    // Thin client over the Apps Script Web App for the new RPC endpoints
+    // (Code.gs). Stages 4-7 use this for student/teacher/timetable/config CRUD
+    // and attendance reads. The legacy GoogleSheetsSync class above keeps
+    // owning the offline attendance write queue and posts in its existing
+    // array-body shape, which Code.gs continues to accept for backward
+    // compatibility.
+    //
+    // Reads (GET):  resolve to the unwrapped `data` field on success, throw on
+    //               error. No submission code required (URL is the secret).
+    // Writes (POST): resolve to the unwrapped `data` field on success, throw on
+    //               error. Submission code is auto-attached from PinManager.
+    //               Content-Type is text/plain to avoid the CORS preflight
+    //               that Apps Script does not answer.
+    const SheetsAPI = (() => {
+      function endpoint() {
+        if (!GOOGLE_SHEETS_URL) {
+          throw new Error('No Sheet URL configured. Set one via window.setSheetUrl(url) and reload.');
+        }
+        return GOOGLE_SHEETS_URL;
+      }
+
+      // Unwrap a response that may be in either of two shapes:
+      //   - Wrapped envelope:  { ok: true, data: ... }  or  { ok: false, error: '...' }
+      //   - Raw payload:       returned directly (object, array, or primitive)
+      // Backends that follow the Stage 3 Code.gs spec use the envelope. Older
+      // or simpler handlers return raw payloads — both are accepted here.
+      function unwrap(json) {
+        if (json && typeof json === 'object' && !Array.isArray(json)) {
+          if (json.ok === true) return json.data;
+          if (json.ok === false) throw new Error(json.error || 'request_failed');
+          if (typeof json.error === 'string' && json.error) throw new Error(json.error);
+        }
+        return json;
+      }
+
+      // Read the response as text first so non-JSON responses (HTML error
+      // pages, empty body, redirects) surface a useful error message instead
+      // of an opaque SyntaxError from res.json().
+      async function readJson(res, action) {
+        const text = await res.text();
+        try { return JSON.parse(text); }
+        catch (e) {
+          const preview = text ? text.slice(0, 200) : '(empty body)';
+          throw new Error('Non-JSON response on ' + action + ': ' + preview);
+        }
+      }
+
+      async function get(action, params) {
+        const url = new URL(endpoint());
+        url.searchParams.set('action', action);
+        Object.keys(params || {}).forEach(k => {
+          const v = params[k];
+          if (v != null && v !== '') url.searchParams.set(k, v);
+        });
+        const res = await fetch(url.toString(), { method: 'GET' });
+        if (!res.ok) throw new Error('HTTP ' + res.status + ' on ' + action);
+        return unwrap(await readJson(res, action));
+      }
+
+      async function post(action, payload) {
+        const body = JSON.stringify({
+          action: action,
+          payload: payload || {},
+          submissionCode: PinManager.getSubmissionCode()
+        });
+        const res = await fetch(endpoint(), {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: body
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status + ' on ' + action);
+        return unwrap(await readJson(res, action));
+      }
+
+      return {
+        // health
+        ping:               ()             => get('ping'),
+        // reads
+        getConfig:          ()             => get('getConfig'),
+        getStudents:        (cls)          => get('getStudents',   { 'class': cls || '' }),
+        getTeachers:        ()             => get('getTeachers'),
+        getTimetable:       (cls)          => get('getTimetable',  { 'class': cls || '' }),
+        getAttendance:      (filters)      => get('getAttendance', filters || {}),
+        // writes (RPC envelope)
+        submitAttendance:   (records)      => post('submitAttendance',   { records: records }),
+        submitLegacyShape:  (submission)   => post('submitAttendance',   { submission: submission }),
+        upsertStudent:      (student)      => post('upsertStudent',      student),
+        deleteStudent:      (admissionNo)  => post('deleteStudent',      { AdmissionNo: admissionNo }),
+        upsertTeacher:      (teacher)      => post('upsertTeacher',      teacher),
+        deleteTeacher:      (teacherId)    => post('deleteTeacher',      { TeacherId: teacherId }),
+        upsertTimetable:    (entry)        => post('upsertTimetable',    entry),
+        deleteTimetable:    (id)           => post('deleteTimetable',    { TimetableId: id }),
+        setConfigValue:     (key, value)   => post('setConfigValue',     { key: key, value: value }),
+        bulkUpsertStudents: (students)     => post('bulkUpsertStudents', { students: students }),
+        bulkUpsertTeachers: (teachers)     => post('bulkUpsertTeachers', { teachers: teachers }),
+        // Stage 5: classes
+        getClasses:         ()             => get('getClasses'),
+        upsertClass:        (cls)          => post('upsertClass',        cls),
+        deleteClass:        (code)         => post('deleteClass',        { ClassCode: code }),
+        bulkUpsertClasses:  (classes)      => post('bulkUpsertClasses',  { classes: classes }),
+      };
+    })();
+    window.SheetsAPI = SheetsAPI;
+    // =================== END SHEETS API ===================
+
+    // ===================== SHEET DATA (Stage 4) =====================
+    // Wraps SheetsAPI with localStorage caching, format adapters, and the
+    // student/teacher CRUD entry points used by the admin UI.
+    //
+    // Caching: every successful refresh writes to localStorage so the app
+    // can render Sheet-managed records offline. Writes round-trip to the
+    // Sheet first (optimistic on the cache: cache updates only after Sheet
+    // confirms). Failures throw — callers surface to the user.
+    //
+    // Format adapters: the Sheet schema uses AdmissionNo / FullName; the
+    // existing app uses Admission_No / Student_Name. The adapters bridge
+    // between them and tag Sheet-sourced records with _source: 'sheet' so
+    // the merge with CLASS_CONFIG students stays distinguishable.
+    //
+    // Teacher PINs are PBKDF2-hashed in the BROWSER (matches Stage 2's
+    // PinManager): the wire and the Sheet only ever see {hash, salt}, never
+    // plaintext. The hashing path is duplicated here intentionally —
+    // PinManager keeps its hasher private to its slots.
+    const SheetData = (() => {
+      const STUDENTS_CACHE_KEY = 'iesr_sheet_students_cache_v1';
+      const TEACHERS_CACHE_KEY = 'iesr_sheet_teachers_cache_v1';
+      const CLASSES_CACHE_KEY  = 'iesr_sheet_classes_cache_v1';
+      const LAST_SYNC_KEY = 'iesr_sheet_data_last_sync';
+      const PBKDF2_ITERATIONS = 100000;
+
+      function readCache(key) {
+        try {
+          const raw = localStorage.getItem(key);
+          const parsed = raw ? JSON.parse(raw) : [];
+          return Array.isArray(parsed) ? parsed : [];
+        } catch (e) { return []; }
+      }
+      function writeCache(key, data) {
+        try { localStorage.setItem(key, JSON.stringify(data || [])); } catch (e) {}
+      }
+
+      // ----- adapters -----
+      function studentToSheet(s) {
+        return {
+          AdmissionNo: String(s.AdmissionNo || s.Admission_No || '').trim(),
+          FullName:    String(s.FullName    || s.Student_Name || '').trim(),
+          Class:       String(s.Class || '').trim(),
+          Active:      s.Active === false ? false : true,
+        };
+      }
+      function studentFromSheet(s) {
+        return {
+          Admission_No: s.AdmissionNo,
+          Student_Name: s.FullName,
+          Class:        s.Class,
+          Active:       s.Active !== false,
+          tags:         [],
+          _source:      'sheet',
+        };
+      }
+      function teacherFromSheet(t) {
+        const classes = (typeof t.Classes === 'string')
+          ? t.Classes.split(',').map(s => s.trim()).filter(Boolean)
+          : (Array.isArray(t.Classes) ? t.Classes : []);
+        return {
+          TeacherId: t.TeacherId,
+          Name:      t.Name,
+          Classes:   classes,
+          PinHash:   t.PinHash || '',
+          PinSalt:   t.PinSalt || '',
+          Active:    t.Active !== false,
+          _source:   'sheet',
+        };
+      }
+      function teacherToSheet(t) {
+        return {
+          TeacherId: String(t.TeacherId || '').trim(),
+          Name:      String(t.Name || '').trim(),
+          Classes:   Array.isArray(t.Classes) ? t.Classes.join(',') : String(t.Classes || '').trim(),
+          PinHash:   t.PinHash || '',
+          PinSalt:   t.PinSalt || '',
+          Active:    t.Active === false ? false : true,
+        };
+      }
+      // Class adapters (Stage 5)
+      function classFromSheet(c) {
+        return {
+          ClassCode:   c.ClassCode,
+          DisplayName: c.DisplayName || c.ClassCode,
+          Category:    c.Category || 'Other',
+          Active:      c.Active !== false,
+          _source:     'sheet',
+        };
+      }
+      function classToSheet(c) {
+        return {
+          ClassCode:   String(c.ClassCode || '').trim(),
+          DisplayName: String(c.DisplayName || c.ClassCode || '').trim(),
+          Category:    String(c.Category || 'Other').trim(),
+          Active:      c.Active === false ? false : true,
+        };
+      }
+
+      // ----- crypto helpers (mirror PinManager's PBKDF2) -----
+      function bytesToHex(bytes) {
+        return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+      }
+      function hexToBytes(hex) {
+        const out = new Uint8Array(hex.length / 2);
+        for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.substr(i*2, 2), 16);
+        return out;
+      }
+      function randomSaltHex() {
+        const b = new Uint8Array(16);
+        crypto.getRandomValues(b);
+        return bytesToHex(b);
+      }
+      async function pbkdf2(pin, saltHex, iterations) {
+        iterations = iterations || PBKDF2_ITERATIONS;
+        const enc = new TextEncoder();
+        const km = await crypto.subtle.importKey(
+          'raw', enc.encode(pin), { name: 'PBKDF2' }, false, ['deriveBits']
+        );
+        const bits = await crypto.subtle.deriveBits(
+          { name: 'PBKDF2', salt: hexToBytes(saltHex), iterations: iterations, hash: 'SHA-256' },
+          km, 256
+        );
+        return bytesToHex(new Uint8Array(bits));
+      }
+      function constantTimeEq(a, b) {
+        if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
+        let r = 0;
+        for (let i = 0; i < a.length; i++) r |= a.charCodeAt(i) ^ b.charCodeAt(i);
+        return r === 0;
+      }
+
+      async function hashTeacherPin(pin) {
+        if (typeof pin !== 'string' || pin.trim().length < 3) {
+          throw new Error('PIN must be at least 3 characters');
+        }
+        const salt = randomSaltHex();
+        const hash = await pbkdf2(pin.trim(), salt);
+        return { hash, salt, iterations: PBKDF2_ITERATIONS };
+      }
+      async function verifyTeacherPin(teacherRecord, pin) {
+        if (!teacherRecord || !teacherRecord.PinHash || !teacherRecord.PinSalt) return false;
+        if (typeof pin !== 'string' || !pin) return false;
+        const computed = await pbkdf2(pin, teacherRecord.PinSalt, PBKDF2_ITERATIONS);
+        return constantTimeEq(computed, teacherRecord.PinHash);
+      }
+
+      // ----- reads (cached) -----
+      function getCachedStudents()                { return readCache(STUDENTS_CACHE_KEY).map(studentFromSheet); }
+      function getCachedStudentsForClass(cls)     { return getCachedStudents().filter(s => s.Class === cls); }
+      function getCachedTeachers()                { return readCache(TEACHERS_CACHE_KEY).map(teacherFromSheet); }
+      function getCachedTeachersForClass(cls)     { return getCachedTeachers().filter(t => Array.isArray(t.Classes) && t.Classes.indexOf(cls) >= 0); }
+      function getRawCachedTeachers()             { return readCache(TEACHERS_CACHE_KEY); }
+      // Class reads (Stage 5)
+      function getCachedClasses()                 { return readCache(CLASSES_CACHE_KEY).map(classFromSheet); }
+      function getCachedClassByCode(code)         { return getCachedClasses().find(c => c.ClassCode === code) || null; }
+
+      // ----- refresh (network) -----
+      async function refreshStudents() {
+        try {
+          const rows = await SheetsAPI.getStudents();
+          const arr = Array.isArray(rows) ? rows : [];
+          writeCache(STUDENTS_CACHE_KEY, arr);
+          return arr.map(studentFromSheet);
+        } catch (e) {
+          console.warn('[SheetData] refreshStudents failed:', e.message);
+          return getCachedStudents();
+        }
+      }
+      async function refreshTeachers() {
+        try {
+          const rows = await SheetsAPI.getTeachers();
+          const arr = Array.isArray(rows) ? rows : [];
+          writeCache(TEACHERS_CACHE_KEY, arr);
+          return arr.map(teacherFromSheet);
+        } catch (e) {
+          console.warn('[SheetData] refreshTeachers failed:', e.message);
+          return getCachedTeachers();
+        }
+      }
+      async function refreshClasses() {
+        try {
+          const rows = await SheetsAPI.getClasses();
+          const arr = Array.isArray(rows) ? rows : [];
+          writeCache(CLASSES_CACHE_KEY, arr);
+          return arr.map(classFromSheet);
+        } catch (e) {
+          console.warn('[SheetData] refreshClasses failed:', e.message);
+          return getCachedClasses();
+        }
+      }
+      async function refreshAll() {
+        await Promise.allSettled([refreshStudents(), refreshTeachers(), refreshClasses()]);
+        try { localStorage.setItem(LAST_SYNC_KEY, new Date().toISOString()); } catch (e) {}
+      }
+
+      // ----- student writes -----
+      async function upsertStudent(student) {
+        const sheetForm = studentToSheet(student);
+        if (!sheetForm.AdmissionNo) throw new Error('Admission number is required');
+        if (!sheetForm.FullName)    throw new Error('Student name is required');
+        if (!sheetForm.Class)       throw new Error('Class is required');
+        const result = await SheetsAPI.upsertStudent(sheetForm);
+        const cache = readCache(STUDENTS_CACHE_KEY);
+        const idx = cache.findIndex(c => String(c.AdmissionNo) === sheetForm.AdmissionNo);
+        if (idx >= 0) cache[idx] = sheetForm; else cache.push(sheetForm);
+        writeCache(STUDENTS_CACHE_KEY, cache);
+        return result;
+      }
+      async function deleteStudent(admissionNo) {
+        if (!admissionNo) throw new Error('Admission number is required');
+        const result = await SheetsAPI.deleteStudent(admissionNo);
+        const cache = readCache(STUDENTS_CACHE_KEY).filter(c => String(c.AdmissionNo) !== String(admissionNo));
+        writeCache(STUDENTS_CACHE_KEY, cache);
+        return result;
+      }
+      async function bulkUpsertStudents(students) {
+        const arr = students.map(studentToSheet)
+          .filter(s => s.AdmissionNo && s.FullName && s.Class);
+        if (!arr.length) return { written: 0 };
+        const result = await SheetsAPI.bulkUpsertStudents(arr);
+        await refreshStudents();
+        return result;
+      }
+
+      // ----- teacher writes -----
+      async function upsertTeacher(teacher, plaintextPin) {
+        const sheetForm = teacherToSheet(teacher);
+        if (!sheetForm.Name) throw new Error('Teacher name is required');
+        if (!sheetForm.TeacherId) {
+          sheetForm.TeacherId = (typeof crypto !== 'undefined' && crypto.randomUUID)
+            ? crypto.randomUUID()
+            : 't_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+        }
+        if (plaintextPin) {
+          const { hash, salt } = await hashTeacherPin(plaintextPin);
+          sheetForm.PinHash = hash;
+          sheetForm.PinSalt = salt;
+        }
+        const result = await SheetsAPI.upsertTeacher(sheetForm);
+        const cache = readCache(TEACHERS_CACHE_KEY);
+        const idx = cache.findIndex(c => String(c.TeacherId) === sheetForm.TeacherId);
+        if (idx >= 0) cache[idx] = sheetForm; else cache.push(sheetForm);
+        writeCache(TEACHERS_CACHE_KEY, cache);
+        return result;
+      }
+      async function deleteTeacher(teacherId) {
+        if (!teacherId) throw new Error('TeacherId is required');
+        const result = await SheetsAPI.deleteTeacher(teacherId);
+        const cache = readCache(TEACHERS_CACHE_KEY).filter(c => String(c.TeacherId) !== String(teacherId));
+        writeCache(TEACHERS_CACHE_KEY, cache);
+        return result;
+      }
+
+      // ----- class writes (Stage 5) -----
+      async function upsertClass(cls) {
+        const sheetForm = classToSheet(cls);
+        if (!sheetForm.ClassCode) throw new Error('Class code is required');
+        const result = await SheetsAPI.upsertClass(sheetForm);
+        const cache = readCache(CLASSES_CACHE_KEY);
+        const idx = cache.findIndex(c => String(c.ClassCode) === sheetForm.ClassCode);
+        if (idx >= 0) cache[idx] = sheetForm; else cache.push(sheetForm);
+        writeCache(CLASSES_CACHE_KEY, cache);
+        return result;
+      }
+      async function deleteClass(code) {
+        if (!code) throw new Error('Class code is required');
+        const result = await SheetsAPI.deleteClass(code);
+        const cache = readCache(CLASSES_CACHE_KEY).filter(c => String(c.ClassCode) !== String(code));
+        writeCache(CLASSES_CACHE_KEY, cache);
+        return result;
+      }
+      async function bulkUpsertClasses(classes) {
+        const arr = classes.map(classToSheet).filter(c => c.ClassCode);
+        if (!arr.length) return { written: 0 };
+        const result = await SheetsAPI.bulkUpsertClasses(arr);
+        await refreshClasses();
+        return result;
+      }
+      async function bulkUpsertTeachers(teachers) {
+        const arr = teachers.map(teacherToSheet).filter(t => t.TeacherId && t.Name);
+        if (!arr.length) return { written: 0 };
+        const result = await SheetsAPI.bulkUpsertTeachers(arr);
+        await refreshTeachers();
+        return result;
+      }
+
+      return {
+        // adapters (exposed for tests/debug)
+        studentFromSheet, studentToSheet,
+        teacherFromSheet, teacherToSheet,
+        classFromSheet,   classToSheet,
+        // reads
+        getCachedStudents, getCachedStudentsForClass,
+        getCachedTeachers, getCachedTeachersForClass, getRawCachedTeachers,
+        getCachedClasses,  getCachedClassByCode,
+        refreshStudents, refreshTeachers, refreshClasses, refreshAll,
+        // student writes
+        upsertStudent, deleteStudent, bulkUpsertStudents,
+        // teacher writes
+        upsertTeacher, deleteTeacher, bulkUpsertTeachers,
+        // class writes (Stage 5)
+        upsertClass, deleteClass, bulkUpsertClasses,
+        // crypto
+        hashTeacherPin, verifyTeacherPin,
+      };
+    })();
+    window.SheetData = SheetData;
+    // =================== END SHEET DATA ===================
 
     // ===== BEHAVIOR TAGS SYSTEM =====
     const BEHAVIOR_TAG_TYPES = {
@@ -5297,9 +6015,9 @@
 
     // ===== CLASS SYSTEM INITIALIZATION =====
     function initializeClassSystem() {
-      document.getElementById('registerBrand').querySelector('h1').textContent = 
-        `IESR — ${currentClass} REGISTER`;
-      document.getElementById('classBrand').textContent = `IESR — ${currentClass}`;
+      document.getElementById('registerBrand').querySelector('h1').textContent =
+        `${CONFIG.registerBrandPrefix} — ${currentClass} REGISTER`;
+      document.getElementById('classBrand').textContent = `${CONFIG.classBrandPrefix} — ${currentClass}`;
       document.getElementById('classRegisterTitle').textContent = `Class Register — ${currentClass}`;
       
       state.className = currentClass;
@@ -5318,7 +6036,24 @@
           tags: s.tags || []
         }));
       }
-      
+
+      // Stage 4: merge in Sheet-managed students for this class. Existing
+      // entries (localStorage or CLASS_CONFIG) take precedence by Admission_No,
+      // so Sheet records only fill gaps — no overwrite of locally edited data.
+      try {
+        const sheetStudents = SheetData.getCachedStudentsForClass(currentClass);
+        sheetStudents.forEach(ss => {
+          if (!state.students.some(existing => existing.Admission_No === ss.Admission_No)) {
+            state.students.push(ss);
+          }
+        });
+      } catch (e) {
+        console.warn('[Stage 4] could not merge Sheet students:', e.message);
+      }
+      // Kick off background refresh — newly fetched Sheet students surface on
+      // the next class load (Stage 5 will add live re-render).
+      SheetData.refreshAll().catch(e => console.warn('[Stage 4] refreshAll failed:', e.message));
+
       populateTeacherDropdown();
       
       indexedDBStorage.init().then(() => {
@@ -5347,19 +6082,79 @@
       attachEventListeners();
     }
     
+    // Stage 5: Populate the login class dropdown from Sheet's Classes tab.
+    // Behavior:
+    //   - If the Sheet has no classes cached, do nothing (the hardcoded
+    //     <option> markup in the HTML serves as the fallback).
+    //   - If the Sheet has classes, replace the dropdown with Sheet entries
+    //     grouped by Category. Preserve any current selection.
+    function populateClassDropdown() {
+      const select = document.getElementById('className');
+      if (!select) return;
+      let sheetClasses = [];
+      try { sheetClasses = SheetData.getCachedClasses().filter(c => c.Active !== false); } catch (e) {}
+      if (!Array.isArray(sheetClasses) || !sheetClasses.length) return;
+
+      const currentSel = select.value;
+
+      const categories = {};
+      sheetClasses.forEach(c => {
+        const cat = c.Category || 'Other';
+        if (!categories[cat]) categories[cat] = [];
+        categories[cat].push(c);
+      });
+
+      const escapeAttr = (s) => String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+      let html = '<option value="">-- Select Class --</option>';
+      Object.keys(categories).sort().forEach(cat => {
+        html += `<optgroup label="${escapeAttr(cat)}">`;
+        categories[cat]
+          .sort((a, b) => String(a.ClassCode).localeCompare(String(b.ClassCode)))
+          .forEach(c => {
+            html += `<option value="${escapeAttr(c.ClassCode)}">${escapeAttr(c.DisplayName || c.ClassCode)}</option>`;
+          });
+        html += `</optgroup>`;
+      });
+      select.innerHTML = html;
+      if (currentSel && select.querySelector(`option[value="${currentSel.replace(/"/g,'\\"')}"]`)) {
+        select.value = currentSel;
+      }
+    }
+
     function populateTeacherDropdown() {
-      if (!currentClass || !CLASS_CONFIG[currentClass]) return;
-      
+      if (!currentClass) return;
+
       const teacherSelect = document.getElementById('teacherSelectDropdown');
       teacherSelect.innerHTML = '<option value="">-- Select Teacher --</option>';
-      
-      const teachers = CLASS_CONFIG[currentClass].teachers || [];
-      teachers.forEach(teacher => {
+
+      // Stage 5: union of CLASS_CONFIG teachers (legacy, toy-hash PINs) and
+      // Sheet teachers (PBKDF2 PINs). De-duplicate by uppercase name. The
+      // verify path tries Sheet PBKDF2 first then CLASS_CONFIG fallback, so
+      // either source can serve a successful unlock.
+      const seen = new Set();
+      const append = (name) => {
+        if (!name) return;
+        const key = String(name).toUpperCase();
+        if (seen.has(key)) return;
+        seen.add(key);
         const option = document.createElement('option');
-        option.value = teacher;
-        option.textContent = teacher;
+        option.value = name;
+        option.textContent = name;
         teacherSelect.appendChild(option);
-      });
+      };
+
+      const legacy = (CLASS_CONFIG[currentClass] && CLASS_CONFIG[currentClass].teachers) || [];
+      legacy.forEach(append);
+
+      try {
+        const sheetTeachers = SheetData.getCachedTeachersForClass(currentClass);
+        sheetTeachers.forEach(t => { if (t && t.Active !== false) append(t.Name); });
+      } catch (e) {
+        console.warn('[Stage 5] could not merge Sheet teachers:', e.message);
+      }
     }
 
     // ===== ENCRYPTED STORAGE FUNCTIONS =====
@@ -5621,7 +6416,7 @@
         }
     }
 
-    // ===== ADMIN PIN VERIFICATION (UPDATED FOR 2003) =====
+    // ===== ADMIN PIN VERIFICATION (PinManager-backed) =====
     function showAdminPinVerification(callback, action = '') {
         document.getElementById('adminPinTitle').textContent = 'Admin Verification Required';
         document.getElementById('adminPinMessage').textContent = `Enter Admin PIN to ${action}`;
@@ -5629,29 +6424,39 @@
         document.getElementById('adminPinError').style.display = 'none';
         document.getElementById('adminPinModal').style.display = 'flex';
         document.getElementById('adminPinInput').focus();
-        
+
         document.getElementById('adminPinModal').dataset.callback = callback;
     }
-    
+
     function hideAdminPinVerification() {
         document.getElementById('adminPinModal').style.display = 'none';
         document.getElementById('adminPinError').style.display = 'none';
     }
-    
-    function verifyAdminPin() {
-        const pin = document.getElementById('adminPinInput').value.trim();
+
+    async function verifyAdminPin() {
+        const inputEl = document.getElementById('adminPinInput');
+        const pin = inputEl.value.trim();
         const callbackName = document.getElementById('adminPinModal').dataset.callback;
-        
+
         if (!pin) {
             showAdminPinError("Please enter Admin PIN");
             return;
         }
-        
-        const enteredHash = EncryptionSystem.hashPin(pin);
-        
-        if (enteredHash === ADMIN_PINS.hash_2003 || enteredHash === ADMIN_PINS.hash_9209) {
+
+        // Admin slot OR globalAdmin slot both unlock admin actions; the
+        // submission code does NOT (it is for backend submissions only).
+        let ok = false;
+        try {
+            ok = (await PinManager.verify('admin', pin))
+                 || (await PinManager.verify('globalAdmin', pin));
+        } catch (e) {
+            console.error('[verifyAdminPin] crypto error:', e);
+            showAdminPinError("Verification failed. Please try again.");
+            return;
+        }
+
+        if (ok) {
             hideAdminPinVerification();
-            // FIXED: safely invoke callback — check window scope then direct function map
             const callbackMap = {
                 'addStudent': addStudent,
                 'editSelectedStudent': editSelectedStudent,
@@ -5659,13 +6464,17 @@
                 'showClearWeekConfirmation': showClearWeekConfirmation,
                 'showClearAllWeeksConfirmation': showClearAllWeeksConfirmation,
                 'openAdminSubmissions': openAdminSubmissions,
-                'openHoaHodViewAfterAuth': openHoaHodViewAfterAuth
+                'openHoaHodViewAfterAuth': openHoaHodViewAfterAuth,
+                'importStudentsCsv': importStudentsCsv,
+                'openManageTeachers': openManageTeachers,
             };
             const fn = callbackMap[callbackName] || window[callbackName];
             if (typeof fn === 'function') fn();
             else console.warn('Admin PIN callback not found:', callbackName);
         } else {
             showAdminPinError("Invalid Admin PIN. Please try again.");
+            inputEl.value = '';
+            inputEl.focus();
         }
     }
     
@@ -5691,21 +6500,27 @@
         document.getElementById('globalAdminPinError').style.display = 'none';
     }
     
-    function verifyGlobalAdminPin() {
-        const pin = document.getElementById('globalAdminPinInput').value.trim();
+    async function verifyGlobalAdminPin() {
+        const inputEl = document.getElementById('globalAdminPinInput');
+        const pin = inputEl.value.trim();
         const callbackName = document.getElementById('globalAdminPinModal').dataset.callback;
-        
+
         if (!pin) {
             showGlobalAdminPinError("Please enter Global Admin PIN");
             return;
         }
-        
-        const enteredHash = EncryptionSystem.hashPin(pin);
-        
-        // GLOBAL ADMIN: 13030 only
-        if (enteredHash === ADMIN_PINS.hash_13030) {
+
+        let ok = false;
+        try {
+            ok = await PinManager.verify('globalAdmin', pin);
+        } catch (e) {
+            console.error('[verifyGlobalAdminPin] crypto error:', e);
+            showGlobalAdminPinError("Verification failed. Please try again.");
+            return;
+        }
+
+        if (ok) {
             hideGlobalAdminPinVerification();
-            // FIXED: safely invoke callback
             const callbackMap = {
                 'openGlobalAdminView': openGlobalAdminView,
                 'openConflictLogViewer': openConflictLogViewer
@@ -5715,6 +6530,8 @@
             else console.warn('Global admin callback not found:', callbackName);
         } else {
             showGlobalAdminPinError("Invalid Global Admin PIN - Access Denied");
+            inputEl.value = '';
+            inputEl.focus();
         }
     }
     
@@ -5777,42 +6594,55 @@
     async function handleTeacherUnlock() {
         const teacherName = document.getElementById('doubleVerifyModal').dataset.teacher;
         const teacherPin = document.getElementById('verifyTeacherPin').value.trim();
-        
+
         if (!teacherPin) {
             showVerifyError("Please enter teacher PIN");
             return;
         }
-        
-        if (!/^\d{4}$/.test(teacherPin)) {
-            showVerifyError("PIN must be 4 digits");
+
+        // Stage 5: relaxed from /^\d{4}$/ to 3-6 digits to match the range
+        // accepted by the Manage Teachers UI.
+        if (!/^\d{3,6}$/.test(teacherPin)) {
+            showVerifyError("PIN must be 3-6 digits");
             return;
         }
-        
+
         const verifyBtn = document.getElementById('confirmVerifyBtn');
         const originalText = verifyBtn.innerHTML;
         verifyBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verifying...';
         verifyBtn.disabled = true;
-        
+
         await new Promise(resolve => setTimeout(resolve, 300));
-        
-        // FIXED: guard against null currentClass or missing teacher
-        const teacherPins = (CLASS_CONFIG[currentClass] && CLASS_CONFIG[currentClass].teacherPins) || {};
-        const correctPinHash = teacherPins[teacherName];
-        const enteredPinHash = EncryptionSystem.hashPin(teacherPin);
-        
-        if (correctPinHash && enteredPinHash === correctPinHash) {
+
+        // Stage 5: try Sheet teachers (PBKDF2) first, then fall back to
+        // CLASS_CONFIG (toy hash). Either source can authorize.
+        let ok = false;
+        try {
+            const sheetTeachers = SheetData.getCachedTeachersForClass(currentClass);
+            const matchByName = sheetTeachers.find(t => String(t.Name).toUpperCase() === String(teacherName).toUpperCase());
+            if (matchByName && matchByName.PinHash && matchByName.PinSalt) {
+                ok = await SheetData.verifyTeacherPin(matchByName, teacherPin);
+            }
+        } catch (e) {
+            console.warn('[Stage 5] Sheet teacher verify error (falling back to CLASS_CONFIG):', e.message);
+        }
+
+        if (!ok) {
+            const teacherPins = (CLASS_CONFIG[currentClass] && CLASS_CONFIG[currentClass].teacherPins) || {};
+            const correctPinHash = teacherPins[teacherName];
+            const enteredPinHash = EncryptionSystem.hashPin(teacherPin);
+            if (correctPinHash && enteredPinHash === correctPinHash) ok = true;
+        }
+
+        if (ok) {
             await unlockTeacherRegister(teacherName);
-            
             verifyBtn.innerHTML = originalText;
             verifyBtn.disabled = false;
-            
             hideDoubleVerification();
-            
             showSuccess(`${teacherName}'s register unlocked successfully!`);
         } else {
             verifyBtn.innerHTML = originalText;
             verifyBtn.disabled = false;
-            
             showVerifyError("Invalid PIN for this teacher. Please check your PIN and try again.");
         }
     }
@@ -5853,7 +6683,7 @@
         }
     });
 
-    // ===== ADMIN-LOCKED BUTTONS (NOW USING 2003) =====
+    // ===== ADMIN-LOCKED BUTTONS =====
     document.getElementById('addStudentBtn').addEventListener('click', function() {
         showAdminPinVerification('addStudent', 'add student');
     });
@@ -5873,7 +6703,15 @@
         }
         showAdminPinVerification('deleteSelectedStudent', 'delete student');
     });
-    
+
+    // Stage 4: CSV import + Manage Teachers (admin-gated)
+    document.getElementById('importCsvBtn').addEventListener('click', function() {
+        showAdminPinVerification('importStudentsCsv', 'import students from CSV');
+    });
+    document.getElementById('manageTeachersBtn').addEventListener('click', function() {
+        showAdminPinVerification('openManageTeachers', 'manage teachers');
+    });
+
     document.getElementById('clearWeek').addEventListener('click', function() {
         showAdminPinVerification('showClearWeekConfirmation', 'clear week');
     });
@@ -10999,8 +11837,8 @@
             return;
         }
         
-        // Admin ID is now permanently 9209 (from hidden input)
-        // No PIN verification needed anymore
+        // Submission code is attached automatically by submitToAdmin()
+        // (sourced from PinManager.getSubmissionCode()).
         submitToAdmin();
     });
     
@@ -11041,7 +11879,7 @@
                 teacher: teacher,
                 class: classCode,
                 weekStart: weekStartStr,
-                adminId: '9209', // Fixed admin ID
+                adminId: PinManager.getSubmissionCode(),
                 submittedAt: new Date().toISOString(),
                 data: weekData, // This includes all subjects stored at marking time
                 summary: {
@@ -11208,12 +12046,29 @@
                 Class: currentClass,
                 tags: []
             });
-            
+
             saveStudentsToStorage();
             renderRegister();
             calculateIntelligence();
             closeModal();
-            showSuccess('Student added successfully!');
+            showSuccess('Student added — syncing to Sheet...');
+
+            // Stage 5: persist to Sheet and surface the result in the toast.
+            // Non-blocking — local IndexedDB/localStorage already has the
+            // change, so the user can keep working while sync runs.
+            SheetData.upsertStudent({
+                AdmissionNo: admissionNo,
+                FullName:    studentName,
+                Class:       currentClass,
+            }).then(result => {
+                const action = (result && result.inserted) ? 'inserted'
+                             : (result && result.updated)  ? 'updated'
+                             : 'saved';
+                showSuccess('Sheet sync OK (' + action + ').');
+            }).catch(err => {
+                console.warn('[Stage 5] Sheet sync failed for new student ' + admissionNo + ':', err);
+                showSuccess('Saved locally — Sheet sync failed: ' + err.message);
+            });
         });
         
         document.getElementById('cancelAddStudent').addEventListener('click', closeModal);
@@ -11258,7 +12113,22 @@
             saveStudentsToStorage();
             renderRegister();
             closeModal();
-            showSuccess('Student updated successfully!');
+            showSuccess('Student updated — syncing to Sheet...');
+
+            // Stage 5: surface Sheet sync result in the toast.
+            SheetData.upsertStudent({
+                AdmissionNo: student.Admission_No,
+                FullName:    newName,
+                Class:       student.Class || currentClass,
+            }).then(result => {
+                const action = (result && result.updated) ? 'updated'
+                             : (result && result.inserted) ? 'inserted'
+                             : 'saved';
+                showSuccess('Sheet sync OK (' + action + ').');
+            }).catch(err => {
+                console.warn('[Stage 5] Sheet sync failed for edited student ' + student.Admission_No + ':', err);
+                showSuccess('Saved locally — Sheet sync failed: ' + err.message);
+            });
         });
         
         document.getElementById('cancelEditStudent').addEventListener('click', closeModal);
@@ -11283,14 +12153,518 @@
     }
     
     function confirmDeleteStudent() {
-        state.students = state.students.filter(s => s.Admission_No !== selectedStudentAdmission);
+        const deletedAdm = selectedStudentAdmission;
+        state.students = state.students.filter(s => s.Admission_No !== deletedAdm);
         selectedStudentAdmission = null; // FIXED: reset stale selection after delete
         saveStudentsToStorage();
         renderRegister();
         calculateIntelligence();
-        showSuccess('Student deleted successfully!');
+        showSuccess('Student deleted — syncing to Sheet...');
+
+        // Stage 5: surface Sheet sync result in the toast.
+        SheetData.deleteStudent(deletedAdm).then(result => {
+            const n = (result && result.deleted) || 0;
+            if (n > 0) {
+                showSuccess('Sheet sync OK (deleted).');
+            } else {
+                showSuccess('Sheet sync OK — no Sheet record matched (was local-only).');
+            }
+        }).catch(err => {
+            console.warn('[Stage 5] Sheet sync failed for deleted student ' + deletedAdm + ':', err);
+            showSuccess('Deleted locally — Sheet sync failed: ' + err.message);
+        });
     }
-    
+
+    // ===================== STAGE 4: CSV IMPORT =====================
+    function importStudentsCsv() {
+        if (!currentClass) {
+            alert('Please select a class first.');
+            return;
+        }
+        const html = `
+            <h3>Import Students from CSV</h3>
+            <div class="small" style="margin-bottom:12px">
+                CSV must include columns <strong>AdmissionNo</strong> and
+                <strong>FullName</strong>. <strong>Class</strong> is optional
+                (defaults to <strong>${escapeHtml(currentClass)}</strong>).
+                Excel files are not supported — export to CSV first.
+            </div>
+            <input type="file" id="csvFileInput" accept=".csv,text/csv,text/plain" />
+            <div id="csvPreviewArea" style="margin-top:12px"></div>
+            <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
+                <button id="csvCancelBtn" class="muted-btn">Cancel</button>
+                <button id="csvImportConfirmBtn" class="btn-primary" disabled>Import</button>
+            </div>
+        `;
+        openModal(html);
+
+        let parsedRecords = [];
+
+        document.getElementById('csvFileInput').addEventListener('change', async (e) => {
+            const file = e.target.files && e.target.files[0];
+            if (!file) return;
+            try {
+                const text = await file.text();
+                const result = parseStudentsCsv(text, currentClass);
+                parsedRecords = result.records;
+                renderCsvPreview(result);
+                document.getElementById('csvImportConfirmBtn').disabled = result.records.length === 0;
+            } catch (err) {
+                document.getElementById('csvPreviewArea').innerHTML =
+                    `<div style="color:#c00">Could not read file: ${escapeHtml(err.message)}</div>`;
+            }
+        });
+
+        document.getElementById('csvCancelBtn').addEventListener('click', closeModal);
+        document.getElementById('csvImportConfirmBtn').addEventListener('click', async () => {
+            const btn = document.getElementById('csvImportConfirmBtn');
+            btn.disabled = true;
+            btn.textContent = 'Importing...';
+            try {
+                const result = await SheetData.bulkUpsertStudents(parsedRecords);
+                const written = (result && (result.written != null ? result.written : (result.inserted || 0))) || parsedRecords.length;
+                // Merge into local state for the currently-loaded class.
+                parsedRecords.forEach(r => {
+                    if (r.Class === currentClass &&
+                        !state.students.some(s => s.Admission_No === r.AdmissionNo)) {
+                        state.students.push({
+                            Admission_No: r.AdmissionNo,
+                            Student_Name: r.FullName,
+                            Class:        r.Class,
+                            tags:         [],
+                            _source:      'sheet',
+                        });
+                    }
+                });
+                saveStudentsToStorage();
+                renderRegister();
+                calculateIntelligence();
+                closeModal();
+                showSuccess(`Imported ${written} students.`);
+            } catch (err) {
+                btn.disabled = false;
+                btn.textContent = 'Import';
+                const errEl = document.getElementById('csvPreviewArea');
+                if (errEl) {
+                    errEl.innerHTML +=
+                        `<div style="color:#c00;margin-top:8px">Import failed: ${escapeHtml(err.message)}</div>`;
+                }
+            }
+        });
+    }
+
+    // RFC 4180-lite CSV parser (handles "quoted, fields" but not multi-line
+    // quoted values). School data is normally simple comma-separated; if a
+    // field contains a comma, wrap it in double quotes.
+    function parseStudentsCsv(text, defaultClass) {
+        const rows = [];
+        const lines = String(text).replace(/\r\n/g, '\n').split('\n');
+        for (const line of lines) {
+            if (!line.trim()) continue;
+            const fields = [];
+            let cur = '';
+            let inQuote = false;
+            for (let i = 0; i < line.length; i++) {
+                const ch = line[i];
+                if (inQuote) {
+                    if (ch === '"' && line[i+1] === '"') { cur += '"'; i++; }
+                    else if (ch === '"') inQuote = false;
+                    else cur += ch;
+                } else {
+                    if (ch === ',') { fields.push(cur); cur = ''; }
+                    else if (ch === '"') inQuote = true;
+                    else cur += ch;
+                }
+            }
+            fields.push(cur);
+            rows.push(fields.map(f => f.trim()));
+        }
+        if (!rows.length) return { records: [], errors: ['Empty file'], totalRows: 0 };
+
+        const header = rows[0].map(h => h.toLowerCase().replace(/[\s_]/g, ''));
+        const admIdx   = header.findIndex(h => h === 'admissionno' || h === 'admno');
+        const nameIdx  = header.findIndex(h => h === 'fullname' || h === 'studentname' || h === 'name');
+        const classIdx = header.findIndex(h => h === 'class');
+        if (admIdx < 0 || nameIdx < 0) {
+            return { records: [], errors: ['Missing required column. Found: ' + header.join(', ')], totalRows: rows.length - 1 };
+        }
+
+        const records = [];
+        const errors = [];
+        rows.slice(1).forEach((r, i) => {
+            const adm = (r[admIdx] || '').trim();
+            const name = (r[nameIdx] || '').trim();
+            const cls = (classIdx >= 0 ? (r[classIdx] || '').trim() : '') || defaultClass;
+            if (!adm)  { errors.push(`Row ${i+2}: missing AdmissionNo`); return; }
+            if (!name) { errors.push(`Row ${i+2}: missing FullName`); return; }
+            if (!cls)  { errors.push(`Row ${i+2}: missing Class`); return; }
+            records.push({ AdmissionNo: adm, FullName: name, Class: cls });
+        });
+        return { records: records, errors: errors, totalRows: rows.length - 1 };
+    }
+
+    function renderCsvPreview(parseResult) {
+        const area = document.getElementById('csvPreviewArea');
+        if (!area) return;
+        const records = parseResult.records;
+        const errors = parseResult.errors;
+        const totalRows = parseResult.totalRows;
+        let html = `<div class="small">Parsed ${records.length} of ${totalRows} rows.</div>`;
+        if (errors.length) {
+            const shown = errors.slice(0, 10).map(e => `<li>${escapeHtml(e)}</li>`).join('');
+            const more = errors.length > 10 ? `<li>...and ${errors.length - 10} more</li>` : '';
+            html += `<div style="color:#c00;margin-top:6px">Errors:<ul style="margin:4px 0 0 18px">${shown}${more}</ul></div>`;
+        }
+        if (records.length) {
+            const preview = records.slice(0, 5);
+            const rowsHtml = preview.map(r =>
+                `<tr><td style="padding:4px">${escapeHtml(r.AdmissionNo)}</td><td style="padding:4px">${escapeHtml(r.FullName)}</td><td style="padding:4px">${escapeHtml(r.Class)}</td></tr>`
+            ).join('');
+            html += `<table style="margin-top:8px;border-collapse:collapse;font-size:12px;width:100%">
+                <thead><tr><th style="border-bottom:1px solid #ddd;text-align:left;padding:4px">AdmissionNo</th><th style="border-bottom:1px solid #ddd;text-align:left;padding:4px">FullName</th><th style="border-bottom:1px solid #ddd;text-align:left;padding:4px">Class</th></tr></thead>
+                <tbody>${rowsHtml}</tbody></table>`;
+            if (records.length > 5) html += `<div class="small" style="margin-top:4px">...and ${records.length - 5} more</div>`;
+        }
+        area.innerHTML = html;
+    }
+
+    // ===================== STAGE 4: TEACHER MANAGEMENT =====================
+    async function openManageTeachers() {
+        const html = `
+            <h3>Manage Teachers</h3>
+            <div class="small" style="margin-bottom:12px;line-height:1.4">
+                Teachers added here are stored in the Sheet's Teachers tab. PINs
+                are PBKDF2-hashed in your browser before being saved — plaintext
+                PINs never reach the Sheet.
+                <br><strong>Stage 4 limitation:</strong> the teacher login dropdown
+                still uses the legacy CLASS_CONFIG list. Sheet-managed teachers
+                can be created/edited/deleted now; login wiring for them lands
+                in Stage 5.
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+                <button id="addTeacherBtn" class="btn-primary">+ Add Teacher</button>
+                <button id="migrateLegacyBtn" class="muted-btn" title="Copy CLASS_CONFIG (legacy hardcoded data) into the Sheet — Stage 5 migration">
+                    <i class="fas fa-database"></i> Migrate from CLASS_CONFIG
+                </button>
+            </div>
+            <div id="teachersTableArea">Loading...</div>
+            <div style="margin-top:12px;text-align:right">
+                <button id="closeManageTeachersBtn" class="muted-btn">Close</button>
+            </div>
+        `;
+        openModal(html);
+        document.getElementById('closeManageTeachersBtn').addEventListener('click', closeModal);
+        document.getElementById('addTeacherBtn').addEventListener('click', () => showTeacherEditor(null));
+        document.getElementById('migrateLegacyBtn').addEventListener('click', async () => {
+            const btn = document.getElementById('migrateLegacyBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Migrating...';
+            try {
+                await migrateLegacyData();
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-database"></i> Migrate from CLASS_CONFIG';
+                renderTeachersTable();
+            }
+        });
+
+        try { await SheetData.refreshTeachers(); } catch (e) { /* fall back to cache */ }
+        renderTeachersTable();
+    }
+
+    function renderTeachersTable() {
+        const area = document.getElementById('teachersTableArea');
+        if (!area) return;
+        const teachers = SheetData.getCachedTeachers();
+        if (!teachers.length) {
+            area.innerHTML = '<div class="small" style="color:#777">No teachers yet. Click "+ Add Teacher" to create the first one.</div>';
+            return;
+        }
+        const rowsHtml = teachers.map(t => `
+            <tr data-teacher-id="${escapeHtml(t.TeacherId)}">
+                <td style="padding:6px">${escapeHtml(t.Name || '')}</td>
+                <td style="padding:6px">${escapeHtml((t.Classes || []).join(', '))}</td>
+                <td style="padding:6px">${t.PinHash ? '<span title="PIN set">●●●●</span>' : '<span style="color:#aaa">not set</span>'}</td>
+                <td style="padding:6px">${t.Active === false ? 'No' : 'Yes'}</td>
+                <td style="padding:6px;text-align:right;white-space:nowrap">
+                    <button class="muted-btn teacher-edit-btn" style="padding:2px 8px">Edit</button>
+                    <button class="muted-btn teacher-resetpin-btn" style="padding:2px 8px">Reset PIN</button>
+                    <button class="muted-btn teacher-delete-btn" style="padding:2px 8px;color:#c00">Delete</button>
+                </td>
+            </tr>
+        `).join('');
+        area.innerHTML = `
+            <table style="border-collapse:collapse;font-size:13px;width:100%">
+                <thead><tr>
+                    <th style="border-bottom:1px solid #ddd;text-align:left;padding:6px">Name</th>
+                    <th style="border-bottom:1px solid #ddd;text-align:left;padding:6px">Classes</th>
+                    <th style="border-bottom:1px solid #ddd;text-align:left;padding:6px">PIN</th>
+                    <th style="border-bottom:1px solid #ddd;text-align:left;padding:6px">Active</th>
+                    <th style="border-bottom:1px solid #ddd;padding:6px"></th>
+                </tr></thead>
+                <tbody>${rowsHtml}</tbody>
+            </table>
+        `;
+        area.querySelectorAll('.teacher-edit-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const id = e.target.closest('tr').dataset.teacherId;
+                const t = SheetData.getCachedTeachers().find(x => String(x.TeacherId) === String(id));
+                if (t) showTeacherEditor(t);
+            });
+        });
+        area.querySelectorAll('.teacher-resetpin-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const id = e.target.closest('tr').dataset.teacherId;
+                const t = SheetData.getCachedTeachers().find(x => String(x.TeacherId) === String(id));
+                if (t) showTeacherPinReset(t);
+            });
+        });
+        area.querySelectorAll('.teacher-delete-btn').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                const tr = e.target.closest('tr');
+                const id = tr.dataset.teacherId;
+                const t = SheetData.getCachedTeachers().find(x => String(x.TeacherId) === String(id));
+                if (!t) return;
+                if (!confirm(`Delete teacher "${t.Name}"?`)) return;
+                try {
+                    await SheetData.deleteTeacher(id);
+                    renderTeachersTable();
+                    showSuccess('Teacher deleted.');
+                } catch (err) {
+                    alert('Delete failed: ' + err.message);
+                }
+            });
+        });
+    }
+
+    function showTeacherEditor(existingTeacher) {
+        const isEdit = !!existingTeacher;
+        const t = existingTeacher || { Name: '', Classes: [], Active: true };
+        const allClasses = Object.keys(CLASS_CONFIG);
+        const classesCsv = (t.Classes || []).join(', ');
+        const html = `
+            <h3>${isEdit ? 'Edit Teacher' : 'Add Teacher'}</h3>
+            <div style="display:flex;flex-direction:column;gap:8px">
+                <label class="small">Name
+                    <input id="teacherNameInput" value="${escapeHtml(t.Name || '')}" placeholder="Full name">
+                </label>
+                <label class="small">Assigned classes (comma-separated)
+                    <input id="teacherClassesInput" value="${escapeHtml(classesCsv)}" placeholder="e.g. CEEMAY2025R, DEEMAY2024A">
+                </label>
+                <div class="small" style="color:#777">Available classes: ${escapeHtml(allClasses.join(', '))}</div>
+                ${!isEdit ? `
+                    <label class="small">Initial PIN (3-6 digits, optional)
+                        <input id="teacherPinInput" type="password" maxlength="6" placeholder="e.g. 4810" autocomplete="off">
+                    </label>` : ''}
+                <label class="small"><input type="checkbox" id="teacherActiveInput" ${t.Active === false ? '' : 'checked'}> Active</label>
+                <div style="display:flex;gap:8px;margin-top:8px">
+                    <button id="teacherSaveBtn" class="btn-primary">${isEdit ? 'Save Changes' : 'Add Teacher'}</button>
+                    <button id="teacherCancelBtn" class="muted-btn">Cancel</button>
+                </div>
+                <div id="teacherEditError" style="color:#c00;font-size:13px"></div>
+            </div>
+        `;
+        openModal(html);
+        document.getElementById('teacherCancelBtn').addEventListener('click', () => openManageTeachers());
+        document.getElementById('teacherSaveBtn').addEventListener('click', async () => {
+            const name = document.getElementById('teacherNameInput').value.trim();
+            const classesCsv = document.getElementById('teacherClassesInput').value.trim();
+            const active = document.getElementById('teacherActiveInput').checked;
+            const errEl = document.getElementById('teacherEditError');
+            errEl.textContent = '';
+            if (!name) { errEl.textContent = 'Name is required.'; return; }
+            const classes = classesCsv.split(',').map(s => s.trim()).filter(Boolean);
+
+            const saveBtn = document.getElementById('teacherSaveBtn');
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'Saving...';
+            try {
+                let pin = null;
+                if (!isEdit) {
+                    pin = (document.getElementById('teacherPinInput').value || '').trim();
+                    if (pin && !/^\d{3,6}$/.test(pin)) {
+                        errEl.textContent = 'PIN must be 3-6 digits.';
+                        saveBtn.disabled = false;
+                        saveBtn.textContent = 'Add Teacher';
+                        return;
+                    }
+                }
+                const payload = {
+                    TeacherId: t.TeacherId || '',
+                    Name:      name,
+                    Classes:   classes,
+                    Active:    active,
+                    PinHash:   t.PinHash || '',
+                    PinSalt:   t.PinSalt || '',
+                };
+                await SheetData.upsertTeacher(payload, pin || undefined);
+                openManageTeachers();
+            } catch (err) {
+                errEl.textContent = 'Save failed: ' + err.message;
+                saveBtn.disabled = false;
+                saveBtn.textContent = isEdit ? 'Save Changes' : 'Add Teacher';
+            }
+        });
+    }
+
+    function showTeacherPinReset(teacher) {
+        const html = `
+            <h3>Reset PIN for ${escapeHtml(teacher.Name)}</h3>
+            <div class="small" style="margin-bottom:12px">
+                Enter a new PIN (3-6 digits). It will be PBKDF2-hashed in your
+                browser before being saved to the Sheet.
+            </div>
+            <input id="resetPinInput" type="password" maxlength="6" placeholder="New PIN" autocomplete="off">
+            <div style="display:flex;gap:8px;margin-top:8px">
+                <button id="resetPinConfirmBtn" class="btn-primary">Set PIN</button>
+                <button id="resetPinCancelBtn" class="muted-btn">Cancel</button>
+            </div>
+            <div id="resetPinError" style="color:#c00;font-size:13px;margin-top:6px"></div>
+        `;
+        openModal(html);
+        document.getElementById('resetPinCancelBtn').addEventListener('click', () => openManageTeachers());
+        document.getElementById('resetPinConfirmBtn').addEventListener('click', async () => {
+            const pin = (document.getElementById('resetPinInput').value || '').trim();
+            const errEl = document.getElementById('resetPinError');
+            if (!/^\d{3,6}$/.test(pin)) { errEl.textContent = 'PIN must be 3-6 digits.'; return; }
+            try {
+                await SheetData.upsertTeacher(teacher, pin);
+                showSuccess('PIN updated.');
+                openManageTeachers();
+            } catch (err) {
+                errEl.textContent = 'Failed: ' + err.message;
+            }
+        });
+    }
+
+    // ===================== STAGE 5: MIGRATION TOOL =====================
+    // Copies CLASS_CONFIG (legacy hardcoded) into the Sheet's Classes /
+    // Students / Teachers tabs. Idempotent: classes upsert by ClassCode,
+    // students by AdmissionNo, teachers by deterministic TeacherId derived
+    // from name. Teacher PINs are NOT migrated (toy hash → PBKDF2 requires
+    // plaintext, which doesn't survive in source). The legacy CLASS_CONFIG
+    // PIN path remains active in handleTeacherUnlock / verifyRolePin so
+    // existing teachers keep working until admin resets each PIN.
+    async function migrateLegacyData() {
+        const codes = Object.keys(CLASS_CONFIG || {});
+        if (!codes.length) {
+            alert('No CLASS_CONFIG to migrate.');
+            return { classes: 0, students: 0, teachers: 0, errors: ['no_class_config'] };
+        }
+        const proceed = confirm(
+            `Migrate ${codes.length} classes (and their embedded students/teachers) from CLASS_CONFIG into the Sheet?\n\n` +
+            `IMPORTANT: teacher PINs cannot be migrated. Migrated teacher records will have empty PIN fields. ` +
+            `Use "Reset PIN" in Manage Teachers before they can log in via the new path. ` +
+            `The existing CLASS_CONFIG PIN path remains active in parallel until removed in a later stage.`
+        );
+        if (!proceed) return { aborted: true };
+
+        const result = { classes: 0, students: 0, teachers: 0, errors: [] };
+
+        // ----- 1. Classes -----
+        try {
+            const classRecords = codes.map(code => ({
+                ClassCode:   code,
+                DisplayName: (CLASS_CONFIG[code] && CLASS_CONFIG[code].displayName) || code,
+                Category:    (CLASS_CONFIG[code] && CLASS_CONFIG[code].category) || 'Other',
+                Active:      true,
+            }));
+            const r = await SheetData.bulkUpsertClasses(classRecords);
+            result.classes = (r && r.written) || classRecords.length;
+        } catch (e) {
+            result.errors.push('Classes: ' + e.message);
+        }
+
+        // ----- 2. Students -----
+        const allStudents = [];
+        codes.forEach(code => {
+            const students = (CLASS_CONFIG[code] && CLASS_CONFIG[code].embeddedStudents) || [];
+            students.forEach(s => {
+                if (s && s.Admission_No) {
+                    allStudents.push({
+                        AdmissionNo: s.Admission_No,
+                        FullName:    s.Student_Name || '',
+                        Class:       code,
+                        Active:      true,
+                    });
+                }
+            });
+        });
+        if (allStudents.length) {
+            try {
+                const r = await SheetData.bulkUpsertStudents(allStudents);
+                result.students = (r && r.written) || allStudents.length;
+            } catch (e) {
+                result.errors.push('Students: ' + e.message);
+            }
+        }
+
+        // ----- 3. Teachers (no PINs) -----
+        // Build a unique-by-name set spanning all classes the teacher appears in.
+        const teacherMap = new Map();
+        codes.forEach(code => {
+            const list = (CLASS_CONFIG[code] && CLASS_CONFIG[code].teachers) || [];
+            list.forEach(name => {
+                if (!name) return;
+                const key = String(name).toUpperCase();
+                if (!teacherMap.has(key)) {
+                    teacherMap.set(key, { Name: name, Classes: [code] });
+                } else {
+                    const existing = teacherMap.get(key);
+                    if (existing.Classes.indexOf(code) < 0) existing.Classes.push(code);
+                }
+            });
+        });
+
+        if (teacherMap.size) {
+            // Skip names that already exist in the Sheet so re-running migration
+            // doesn't clobber teachers an admin has already set up.
+            let existingNames = new Set();
+            try {
+                const existing = SheetData.getCachedTeachers();
+                existing.forEach(t => existingNames.add(String(t.Name).toUpperCase()));
+            } catch (e) {}
+
+            const slug = (s) => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/(^_|_$)/g, '');
+            const teacherRecords = Array.from(teacherMap.values())
+                .filter(t => !existingNames.has(String(t.Name).toUpperCase()))
+                .map(t => ({
+                    TeacherId: 'legacy_' + slug(t.Name),
+                    Name:      t.Name,
+                    Classes:   t.Classes,
+                    PinHash:   '',
+                    PinSalt:   '',
+                    Active:    true,
+                }));
+
+            if (teacherRecords.length) {
+                try {
+                    const r = await SheetData.bulkUpsertTeachers(teacherRecords);
+                    result.teachers = (r && r.written) || teacherRecords.length;
+                } catch (e) {
+                    result.errors.push('Teachers: ' + e.message);
+                }
+            }
+        }
+
+        await SheetData.refreshAll();
+
+        let summary = `Migration complete.\n\n• Classes: ${result.classes}\n• Students: ${result.students}\n• Teachers: ${result.teachers} (PINs not set — use Reset PIN before login)`;
+        if (result.errors.length) summary += '\n\nERRORS:\n' + result.errors.join('\n');
+        alert(summary);
+        return result;
+    }
+    window.migrateLegacyData = migrateLegacyData;
+    // =================== END STAGE 5 MIGRATION ===================
+
+    // Used by the Stage 4 admin modals to render user-supplied strings safely.
+    function escapeHtml(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, ch => ({
+            '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
+        }[ch]));
+    }
+    // =================== END STAGE 4 ADMIN UI ===================
+
     window.deleteSession = function(index) {
         if (confirm('Delete this session?')) {
             state.sessions.splice(index, 1);
@@ -11806,11 +13180,19 @@
     window.openHoaHodViewAfterAuth = openHoaHodViewAfterAuth;
     window.confirmLockRegister = confirmLockRegister;
     window.confirmDeleteStudent = confirmDeleteStudent;
+    window.importStudentsCsv = importStudentsCsv;
+    window.openManageTeachers = openManageTeachers;
 
     // ===== INITIALIZE APPLICATION =====
     document.addEventListener('DOMContentLoaded', function() {
-        console.log('IESR Electrical Register System v2 Loaded — Full Refactor Applied');
+        console.log(`${CONFIG.schoolName} Register System v2 Loaded — Full Refactor Applied`);
         console.log('Available Classes:', Object.keys(CLASS_CONFIG));
+
+        // Stage 5: populate class dropdown from Sheet (cache first, then refresh).
+        populateClassDropdown();
+        SheetData.refreshAll()
+            .then(() => populateClassDropdown())
+            .catch(e => console.warn('[Stage 5] background refreshAll failed:', e.message));
         
         document.getElementById('loginForm').addEventListener('submit', handleLogin);
         document.getElementById('loginButton').addEventListener('click', function(e) {
@@ -12849,7 +14231,7 @@
       icon.className = 'role-pin-icon admin';
       icon.innerHTML = '<i class="fas fa-user-shield"></i>';
       title.textContent = 'Admin Access';
-      sub.textContent = 'Enter Admin PIN (2003) to continue';
+      sub.textContent = 'Enter Admin PIN to continue';
       btn.className = 'role-pin-btn confirm admin-style';
     }
 
@@ -12868,7 +14250,7 @@
     if (e.key === 'Enter') verifyRolePin();
   });
 
-  window.verifyRolePin = function() {
+  window.verifyRolePin = async function() {
     const pin = document.getElementById('rolePinInput').value.trim();
     const errEl = document.getElementById('rolePinError');
     errEl.classList.remove('show');
@@ -12879,9 +14261,17 @@
     }
 
     if (_currentRole === 'admin') {
-      // Admin PIN is 2003 (or global admin 13030)
-      const enteredHash = EncryptionSystem.hashPin(pin);
-      if (enteredHash === ADMIN_PINS.hash_2003 || enteredHash === ADMIN_PINS.hash_13030) {
+      let ok = false;
+      try {
+        ok = (await PinManager.verify('admin', pin))
+             || (await PinManager.verify('globalAdmin', pin));
+      } catch (e) {
+        console.error('[verifyRolePin] crypto error:', e);
+        errEl.textContent = 'Verification failed. Please try again.';
+        errEl.classList.add('show');
+        return;
+      }
+      if (ok) {
         document.getElementById('rolePinModal').classList.remove('active');
         openTeacherAdminRegister(pin);
       } else {
@@ -12894,16 +14284,28 @@
     }
 
     if (_currentRole === 'teacher') {
-      // Check if pin belongs to ANY teacher in ANY class
+      // Stage 5: check Sheet teachers (PBKDF2) first, then any CLASS_CONFIG
+      // teacherPin (legacy toy hash) as fallback. Either match unlocks.
       let found = false;
-      for (const cls in CLASS_CONFIG) {
-        const pins = CLASS_CONFIG[cls].teacherPins || {};
-        for (const teacher in pins) {
-          if (EncryptionSystem.hashPin(pin) === pins[teacher]) {
-            found = true; break;
+      try {
+        const sheetTeachers = SheetData.getCachedTeachers();
+        for (const t of sheetTeachers) {
+          if (t && t.PinHash && t.PinSalt && t.Active !== false) {
+            if (await SheetData.verifyTeacherPin(t, pin)) { found = true; break; }
           }
         }
-        if (found) break;
+      } catch (e) {
+        console.warn('[Stage 5] role-pin Sheet verify failed (falling back):', e.message);
+      }
+      if (!found) {
+        const enteredHash = EncryptionSystem.hashPin(pin);
+        for (const cls in CLASS_CONFIG) {
+          const pins = CLASS_CONFIG[cls].teacherPins || {};
+          for (const teacher in pins) {
+            if (enteredHash === pins[teacher]) { found = true; break; }
+          }
+          if (found) break;
+        }
       }
       if (found) {
         document.getElementById('rolePinModal').classList.remove('active');
