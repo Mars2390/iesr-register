@@ -4816,7 +4816,15 @@
         });
         const res = await fetch(endpoint(), {
           method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          // application/x-www-form-urlencoded is a CORS "simple" Content-Type
+          // (no preflight) and survives the script.google.com ->
+          // googleusercontent.com 302 redirect chain more reliably than
+          // text/plain when posting from a third-party origin (e.g. GitHub
+          // Pages). Apps Script preserves the raw body in
+          // e.postData.contents regardless of declared Content-Type, so the
+          // server-side JSON.parse(raw) in Code.gs continues to work
+          // unchanged — no redeploy required for this fix.
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: body
         });
         if (!res.ok) throw new Error('HTTP ' + res.status + ' on ' + action);
