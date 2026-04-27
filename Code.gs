@@ -1,5 +1,5 @@
 /**
- * Multi-tenant School Register — Google Apps Script backend (Stage 3)
+ * Multi-tenant School Register — Google Apps Script backend.
  *
  * DEPLOYMENT
  *   1. Open the target Google Sheet (or create a new empty one).
@@ -7,59 +7,21 @@
  *   3. Save. Then Deploy > New deployment > Type: Web app.
  *        Execute as: Me
  *        Who has access: Anyone   (required so the browser app can call it)
- *   4. Copy the resulting /exec URL.
- *   5. In the school register app, paste that URL into the first-run prompt
- *      (or call window.setSheetUrl('https://script.google.com/.../exec') in
- *      the browser console).
+ *   4. Copy the resulting /exec URL into the school register app.
  *
- *   The five tabs (Config, Students, Teachers, Timetable, Attendance) are
- *   created automatically on first request — you do NOT need to set up the
- *   spreadsheet by hand.
- *
- * SHEETS SCHEMA (created automatically on first request)
- *   Config:     Key | Value | UpdatedAt
- *               Required keys (writable via setConfigValue): submissionCode
- *               Optional keys: any tenant override mirroring client CONFIG.
- *   Students:   AdmissionNo | FullName | Class | Active | UpdatedAt
- *   Teachers:   TeacherId | Name | Classes | PinHash | PinSalt | Active | UpdatedAt
- *               (PinHash/PinSalt populated by Stage 4 teacher CRUD; can be empty)
- *   Timetable:  TimetableId | Class | Day | StartTime | EndTime | Subject | TeacherId | UpdatedAt
- *   Attendance: SubmissionId | Class | WeekStart | Teacher | StudentAdmNo |
- *               Date | SessionId | Subject | Status | TagsJSON | Notes | SubmittedAt
+ *   Six tabs (Config, Classes, Students, Teachers, Timetable, Attendance) are
+ *   created automatically on first request — no manual sheet setup required.
  *
  * REQUEST FORMATS
- *   GET ?action=ping
- *       returns { ok:true, data:{ pong:true, time:'...' } }
- *   GET ?action=getConfig
- *   GET ?action=getStudents&class=CEEMAY2025R
- *   GET ?action=getTeachers
- *   GET ?action=getTimetable&class=CEEMAY2025R
- *   GET ?action=getAttendance&class=...&teacher=...&from=YYYY-MM-DD&to=YYYY-MM-DD
+ *   GET  ?action=<verb>&<filters>
+ *   POST text/plain or x-www-form-urlencoded body containing:
+ *        { action, payload, submissionCode }
  *
- *   POST envelope body (Content-Type: text/plain, body is JSON.stringify of):
- *       { action:'<verb>', payload:{...}, submissionCode:'<plaintext>' }
- *     Recognized actions: submitAttendance, upsertStudent, deleteStudent,
- *       upsertTeacher, deleteTeacher, upsertTimetable, deleteTimetable,
- *       setConfigValue, bulkUpsertStudents
- *
- *   POST array body (legacy compatibility for existing client sync queue):
- *       Body is a JSON array of flat attendance records. Submission code may
- *       be passed via query (?submissionCode=...) — if Config has none set,
- *       the request is accepted (legacy-permissive behavior).
- *
- * AUTH MODEL
- *   Reads (GET): no auth — the URL itself is the secret. The Apps Script must
- *     be deployed "Anyone" so the browser app can hit it without OAuth.
- *   Writes (POST envelope): require submissionCode matching Config.submissionCode.
- *     If Config has no submissionCode set, writes are permitted (bootstrapping
- *     mode for new tenants — set one via setConfigValue ASAP).
- *   Writes (POST legacy array): permitted unconditionally if submissionCode is
- *     unset; otherwise must match.
- *
- * THIS IS A LOW-BUDGET BACKEND. Apps Script URLs leak. Submission codes go in
- * cleartext over HTTPS. Treat this as obscurity-plus-shared-secret, not as a
- * real authentication system. For a real one you would put a proper API server
- * in front of the sheet and enforce per-user OAuth.
+ * AUTH
+ *   Reads (GET):  no auth — the URL is the secret.
+ *   Writes (POST): require submissionCode == Config.submissionCode. If the
+ *                  Config sheet has no submissionCode set, writes are
+ *                  permitted (bootstrap mode for new tenants — set one ASAP).
  */
 
 const SHEETS = {
@@ -129,21 +91,69 @@ function readConfig_() {
 
 // ===== response helpers =====
 
-function jsonOut_(payload) {
+function jsonResponse_(data) {
   return ContentService
-    .createTextOutput(JSON.stringify(payload))
+    .createTextOutput(JSON.stringify(data))
     .setMimeType(ContentService.MimeType.JSON);
 }
-function ok_(data, extra)     { return jsonOut_(Object.assign({ ok: true,  data: data == null ? null : data }, extra || {})); }
-function err_(message, code)  { return jsonOut_({ ok: false, error: String(message || 'error'), code: code || 400 }); }
+function ok_(data, extra)    { return jsonResponse_(Object.assign({ ok: true,  data: data == null ? null : data }, extra || {})); }
+function err_(message, code) { return jsonResponse_({ ok: false, error: String(message || 'error'), code: code || 400 }); }
 
 // ===== auth =====
 
 function checkSubmissionCode_(provided) {
   const cfg = readConfig_();
   const expected = (cfg.submissionCode || '').toString();
-  if (!expected) return true;  // bootstrap: no code configured = allow
+  if (!expected) return true;
   return String(provided || '') === expected;
+}
+
+// ===== payload normalizers (accept multiple name formats) =====
+
+function normalizeStudent_(obj) {
+  if (!obj || typeof obj !== 'object') return {};
+  return {
+    AdmissionNo: String(obj.AdmissionNo || obj.Admission_No || obj.admissionNo || obj['Admission No'] || obj.admNo || '').trim(),
+    FullName:    String(obj.FullName || obj.Full_Name || obj.Name || obj.StudentName || obj.Student_Name || obj.fullName || '').trim(),
+    Class:       String(obj.Class || obj['class'] || obj.ClassCode || '').trim(),
+    Active:      obj.Active === false ? false : true,
+  };
+}
+
+function normalizeTeacher_(obj) {
+  if (!obj || typeof obj !== 'object') return {};
+  return {
+    TeacherId: String(obj.TeacherId || obj.teacherId || obj.id || '').trim(),
+    Name:      String(obj.Name || obj.FullName || obj.Full_Name || obj.TeacherName || obj.fullName || '').trim(),
+    Classes:   Array.isArray(obj.Classes) ? obj.Classes.join(',')
+             : String(obj.Classes || obj.classes || '').trim(),
+    PinHash:   String(obj.PinHash || obj.pinHash || '').trim(),
+    PinSalt:   String(obj.PinSalt || obj.pinSalt || '').trim(),
+    Active:    obj.Active === false ? false : true,
+  };
+}
+
+function normalizeClass_(obj) {
+  if (!obj || typeof obj !== 'object') return {};
+  return {
+    ClassCode:   String(obj.ClassCode || obj.classCode || obj.Class || obj.code || '').trim(),
+    DisplayName: String(obj.DisplayName || obj.displayName || obj.Name || obj.name || obj.ClassCode || '').trim(),
+    Category:    String(obj.Category || obj.category || 'Other').trim(),
+    Active:      obj.Active === false ? false : true,
+  };
+}
+
+function normalizeTimetable_(obj) {
+  if (!obj || typeof obj !== 'object') return {};
+  return {
+    TimetableId: String(obj.TimetableId || obj.timetableId || obj.id || '').trim(),
+    Class:       String(obj.Class || obj['class'] || obj.ClassCode || '').trim(),
+    Day:         String(obj.Day || obj.day || obj.DayOfWeek || '').trim(),
+    StartTime:   String(obj.StartTime || obj.startTime || obj.start || '').trim(),
+    EndTime:     String(obj.EndTime || obj.endTime || obj.end || '').trim(),
+    Subject:     String(obj.Subject || obj.subject || '').trim(),
+    TeacherId:   String(obj.TeacherId || obj.teacherId || obj.teacher || '').trim(),
+  };
 }
 
 // ===== writes =====
@@ -157,7 +167,7 @@ function writeAttendanceBatch_(records) {
       : '';
     return [
       r.submissionId || Utilities.getUuid(),
-      r.class || '',
+      r['class'] || '',
       r.weekStart || '',
       r.teacher || '',
       r.studentAdmNo || r.studentId || '',
@@ -180,7 +190,7 @@ function writeAttendanceBatch_(records) {
 function expandSubmission_(sub) {
   const out = [];
   const data = (sub && sub.data) || {};
-  const submittedAt = sub.submittedAt || new Date().toISOString();
+  const submittedAt = (sub && sub.submittedAt) || new Date().toISOString();
   Object.keys(data).forEach(function(key) {
     const rec = data[key] || {};
     if (!rec.status || rec.status === 'U') return;
@@ -192,17 +202,17 @@ function expandSubmission_(sub) {
     if (sessionId === 'tags' || sessionId === 'notes') return;
     out.push({
       submissionId: sub.id || '',
-      class: sub.class || '',
-      weekStart: sub.weekStart || '',
-      teacher: sub.teacher || '',
+      'class':      sub['class'] || '',
+      weekStart:    sub.weekStart || '',
+      teacher:      sub.teacher || '',
       studentAdmNo: studentAdmNo,
-      date: date,
-      sessionId: sessionId,
-      subject: rec.subject || '',
-      status: rec.status,
-      tags: rec.tags || null,
-      notes: rec.notes || '',
-      submittedAt: submittedAt
+      date:         date,
+      sessionId:    sessionId,
+      subject:      rec.subject || '',
+      status:       rec.status,
+      tags:         rec.tags || null,
+      notes:        rec.notes || '',
+      submittedAt:  submittedAt
     });
   });
   return out;
@@ -212,8 +222,8 @@ function upsertRow_(sheetName, keyCol, obj) {
   if (!obj || obj[keyCol] == null || String(obj[keyCol]).trim() === '') {
     return err_('missing_key: ' + keyCol, 400);
   }
-  // Capture and normalize the key once so the response echo is always correct
-  // even if `obj` is mutated later in this function.
+  // Capture the key once so the response echo is always correct even if
+  // `obj` is later mutated (e.g. by the UpdatedAt assignment below).
   const keyValue = String(obj[keyCol]).trim();
   obj[keyCol] = keyValue;
 
@@ -266,8 +276,8 @@ function doGet(e) {
     const p = (e && e.parameter) || {};
     let action = p.action || '';
 
-    // Legacy compat: callers without an action parameter that pass attendance
-    // filters get routed to getAttendance.
+    // Legacy compat: callers without an action that pass attendance filters
+    // are routed to getAttendance.
     if (!action && (p['class'] || p.teacher || p.subject || p.startDate || p.endDate || p.date)) {
       action = 'getAttendance';
       if (p.startDate) p.from = p.startDate;
@@ -316,75 +326,85 @@ function doPost(e) {
     try { body = JSON.parse(raw); }
     catch (ex) { return err_('bad_json: ' + ex.message, 400); }
 
-    // -------- legacy array body: attendance batch from existing client sync queue
+    // Legacy: array body = attendance batch (e.g. from older client sync queues)
     if (Array.isArray(body)) {
       const provided = (e.parameter && e.parameter.submissionCode) || '';
       if (!checkSubmissionCode_(provided)) return err_('invalid_submission_code', 401);
       return writeAttendanceBatch_(body);
     }
 
-    // -------- new RPC envelope
+    // RPC envelope: { action, payload, submissionCode }
     const action = body.action || '';
-    const payload = body.payload || {};
     const submissionCode = body.submissionCode || '';
+    // Payload unwrap: prefer body.payload; fall back to whole body if the
+    // caller sent a flat object (lets us accept either shape).
+    const p = body.payload || body;
+
     if (!checkSubmissionCode_(submissionCode)) return err_('invalid_submission_code', 401);
 
-    if (action === 'submitAttendance') {
-      const records = Array.isArray(payload.records)
-        ? payload.records
-        : (payload.submission ? expandSubmission_(payload.submission) : []);
+    // ----- attendance -----
+    if (action === 'submitAttendance' || action === 'syncAttendance') {
+      const records = Array.isArray(p.records)
+        ? p.records
+        : (p.submission ? expandSubmission_(p.submission) : []);
       return writeAttendanceBatch_(records);
     }
-    if (action === 'upsertStudent')      return upsertRow_('Students',  'AdmissionNo', payload);
-    if (action === 'deleteStudent')      return deleteRow_('Students',  'AdmissionNo', payload.AdmissionNo);
-    if (action === 'upsertTeacher')      return upsertRow_('Teachers',  'TeacherId',   payload);
-    if (action === 'deleteTeacher')      return deleteRow_('Teachers',  'TeacherId',   payload.TeacherId);
-    if (action === 'upsertTimetable')    return upsertRow_('Timetable', 'TimetableId', payload);
-    if (action === 'deleteTimetable')    return deleteRow_('Timetable', 'TimetableId', payload.TimetableId);
-    if (action === 'upsertClass')        return upsertRow_('Classes',   'ClassCode',   payload);
-    if (action === 'deleteClass')        return deleteRow_('Classes',   'ClassCode',   payload.ClassCode);
-    if (action === 'setConfigValue')     return setConfigValue_(payload.key, payload.value);
+
+    // ----- single-row CRUD -----
+    if (action === 'upsertStudent')   return upsertRow_('Students',  'AdmissionNo', normalizeStudent_(p));
+    if (action === 'deleteStudent')   return deleteRow_('Students',  'AdmissionNo', p.AdmissionNo || p.Admission_No);
+    if (action === 'upsertTeacher')   return upsertRow_('Teachers',  'TeacherId',   normalizeTeacher_(p));
+    if (action === 'deleteTeacher')   return deleteRow_('Teachers',  'TeacherId',   p.TeacherId);
+    if (action === 'upsertClass')     return upsertRow_('Classes',   'ClassCode',   normalizeClass_(p));
+    if (action === 'deleteClass')     return deleteRow_('Classes',   'ClassCode',   p.ClassCode);
+    if (action === 'upsertTimetable') return upsertRow_('Timetable', 'TimetableId', normalizeTimetable_(p));
+    if (action === 'deleteTimetable') return deleteRow_('Timetable', 'TimetableId', p.TimetableId);
+    if (action === 'setConfigValue')  return setConfigValue_(p.key, p.value);
+
+    // ----- bulk: each looper calls the single upsert -----
     if (action === 'bulkUpsertStudents') {
-      const list = Array.isArray(payload.students) ? payload.students : [];
+      const list = Array.isArray(p.students) ? p.students : [];
       let n = 0;
       list.forEach(function(s) {
-        if (s && s.AdmissionNo) { upsertRow_('Students', 'AdmissionNo', s); n++; }
-      });
-      return ok_({ written: n });
-    }
-    if (action === 'bulkUpsertClasses') {
-      const list = Array.isArray(payload.classes) ? payload.classes : [];
-      let n = 0;
-      list.forEach(function(c) {
-        if (c && c.ClassCode) { upsertRow_('Classes', 'ClassCode', c); n++; }
+        const norm = normalizeStudent_(s);
+        if (norm.AdmissionNo) { upsertRow_('Students', 'AdmissionNo', norm); n++; }
       });
       return ok_({ written: n });
     }
     if (action === 'bulkUpsertTeachers') {
-      const list = Array.isArray(payload.teachers) ? payload.teachers : [];
+      const list = Array.isArray(p.teachers) ? p.teachers : [];
       let n = 0;
       list.forEach(function(t) {
-        if (t && t.TeacherId) { upsertRow_('Teachers', 'TeacherId', t); n++; }
+        const norm = normalizeTeacher_(t);
+        if (norm.TeacherId && norm.Name) { upsertRow_('Teachers', 'TeacherId', norm); n++; }
       });
       return ok_({ written: n });
     }
+    if (action === 'bulkUpsertClasses') {
+      const list = Array.isArray(p.classes) ? p.classes : [];
+      let n = 0;
+      list.forEach(function(c) {
+        const norm = normalizeClass_(c);
+        if (norm.ClassCode) { upsertRow_('Classes', 'ClassCode', norm); n++; }
+      });
+      return ok_({ written: n });
+    }
+
     return err_('unknown_action: ' + action, 400);
   } catch (ex) {
     return err_(ex.message || String(ex), 500);
   }
 }
 
-// One-off helper: run from the editor (Run > setupSheets) on first deploy to
-// pre-create the tabs without making any HTTP request.
+// ===== editor-only helpers (run from Apps Script editor) =====
+
 function setupSheets() {
   ensureAllSheets_();
   Logger.log('Sheets ensured: ' + Object.keys(SHEETS).join(', '));
 }
 
-// One-off helper: run from the editor (Run > setSubmissionCodeFromEditor) to
-// set a starting submissionCode without exposing it to the network. Edit the
-// literal below before running.
 function setSubmissionCodeFromEditor() {
+  // Edit the literal below before running, then Run > setSubmissionCodeFromEditor.
   setConfigValue_('submissionCode', 'CHANGE_ME');
   Logger.log('submissionCode written to Config sheet.');
 }

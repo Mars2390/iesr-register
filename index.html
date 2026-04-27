@@ -4612,26 +4612,29 @@
 
           for (const batch of batches) {
             const records = batch.map(item => item.data);
-            
-            try {
-              await fetch(this.url, {
-                method: 'POST',
-                mode: 'no-cors',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(records)
-              });
 
-              console.log(`✅ Batch of ${records.length} sent successfully`);
-              
+            try {
+              // Stage 5+ fix: route the legacy queue through SheetsAPI.
+              // The original raw fetch used mode: 'no-cors' + Content-Type:
+              // 'application/json' which (a) silently failed CORS preflight
+              // from third-party origins like GitHub Pages and (b) sent no
+              // submissionCode, so Code.gs rejected the writes once the
+              // Config tab had a code set. SheetsAPI.submitAttendance uses
+              // the application/x-www-form-urlencoded transport (CORS-simple,
+              // works through the proxy or directly), attaches the
+              // submissionCode automatically, and surfaces real errors so
+              // the catch below actually fires on failure.
+              const result = await SheetsAPI.submitAttendance(records);
+              const written = (result && result.written != null) ? result.written : records.length;
+              console.log(`✅ Batch of ${records.length} sent successfully (server wrote ${written})`);
+
               batch.forEach(item => {
                 syncedIds.push(item.id);
               });
 
             } catch (error) {
               console.error('Batch sync failed:', error);
-              
+
               for (const item of batch) {
                 await indexedDBStorage.updateSyncRetry(item.id);
               }
@@ -11950,12 +11953,30 @@
             
             localStorage.setItem('iesr_admin_submissions', JSON.stringify(submissions));
             adminSubmissions = submissions;
-            
-            const subjectStatus = recordsWithSubject === totalRecords ? '✅ All records have subjects' : 
-                                recordsWithSubject > 0 ? `⚠️ ${recordsWithSubject}/${totalRecords} records have subjects` : 
+
+            const subjectStatus = recordsWithSubject === totalRecords ? '✅ All records have subjects' :
+                                recordsWithSubject > 0 ? `⚠️ ${recordsWithSubject}/${totalRecords} records have subjects` :
                                 '❌ No subjects found in records';
-            
+
             showSuccess(`Attendance data submitted to Admin successfully! ${subjectStatus}`);
+
+            // Stage 5+ fix: also push directly to the Sheet's Attendance tab
+            // via the new RPC envelope. submitToAdmin previously only saved
+            // to localStorage and relied on the legacy syncPendingData path
+            // (now also fixed) to surface attendance in the Sheet — but if
+            // the user hadn't clicked Save Week first, nothing was queued
+            // and nothing reached the Sheet. This direct-write path makes
+            // "Send to Admin" produce visible rows in the Attendance tab
+            // immediately, regardless of queue state.
+            SheetsAPI.submitLegacyShape(submission)
+                .then(r => {
+                    const n = (r && r.written != null) ? r.written : '?';
+                    showSuccess(`Sheet sync OK (${n} attendance rows written).`);
+                })
+                .catch(err => {
+                    console.error('[submitToAdmin] Sheet sync failed:', err);
+                    showSuccess('Saved locally — Sheet sync failed: ' + err.message);
+                });
             
         } catch (error) {
             console.error('Submission failed:', error);
@@ -12405,6 +12426,7 @@
                 btn.disabled = false;
                 btn.innerHTML = '<i class="fas fa-database"></i> Migrate from CLASS_CONFIG';
                 renderTeachersTable();
+                refreshTeacherDropdownIfClassLoaded();
             }
         });
 
@@ -12445,36 +12467,50 @@
                 <tbody>${rowsHtml}</tbody>
             </table>
         `;
-        area.querySelectorAll('.teacher-edit-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const id = e.target.closest('tr').dataset.teacherId;
-                const t = SheetData.getCachedTeachers().find(x => String(x.TeacherId) === String(id));
-                if (t) showTeacherEditor(t);
-            });
-        });
-        area.querySelectorAll('.teacher-resetpin-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const id = e.target.closest('tr').dataset.teacherId;
-                const t = SheetData.getCachedTeachers().find(x => String(x.TeacherId) === String(id));
-                if (t) showTeacherPinReset(t);
-            });
-        });
-        area.querySelectorAll('.teacher-delete-btn').forEach(btn => {
-            btn.addEventListener('click', async (e) => {
-                const tr = e.target.closest('tr');
+        // Event delegation: one listener on the area, idempotent across
+        // re-renders. Per-button addEventListener was fragile — any DOM
+        // mutation outside renderTeachersTable (or the Stage 5 button-row
+        // restructure) silently drops the listeners. Delegation fixes it.
+        if (!area._teachersDelegated) {
+            area._teachersDelegated = true;
+            area.addEventListener('click', async (e) => {
+                const btn = e.target.closest('button');
+                if (!btn) return;
+                const tr = btn.closest('tr');
+                if (!tr || !tr.dataset.teacherId) return;
                 const id = tr.dataset.teacherId;
                 const t = SheetData.getCachedTeachers().find(x => String(x.TeacherId) === String(id));
-                if (!t) return;
-                if (!confirm(`Delete teacher "${t.Name}"?`)) return;
+                if (!t) {
+                    console.error('[Manage Teachers] no cached teacher for id:', id);
+                    alert('Could not find teacher record. Try closing and reopening Manage Teachers.');
+                    return;
+                }
                 try {
-                    await SheetData.deleteTeacher(id);
-                    renderTeachersTable();
-                    showSuccess('Teacher deleted.');
+                    if (btn.classList.contains('teacher-edit-btn'))     return showTeacherEditor(t);
+                    if (btn.classList.contains('teacher-resetpin-btn')) return showTeacherPinReset(t);
+                    if (btn.classList.contains('teacher-delete-btn')) {
+                        if (!confirm(`Delete teacher "${t.Name}"?`)) return;
+                        await SheetData.deleteTeacher(id);
+                        renderTeachersTable();
+                        refreshTeacherDropdownIfClassLoaded();
+                        showSuccess('Teacher deleted.');
+                    }
                 } catch (err) {
-                    alert('Delete failed: ' + err.message);
+                    console.error('[Manage Teachers] action failed:', err);
+                    alert('Action failed: ' + err.message);
                 }
             });
-        });
+        }
+    }
+
+    // Re-render the teacher login dropdown after a teacher CRUD operation,
+    // but only if a class is currently loaded (otherwise there is no
+    // teacherSelectDropdown element to populate yet).
+    function refreshTeacherDropdownIfClassLoaded() {
+        if (currentClass && typeof populateTeacherDropdown === 'function') {
+            try { populateTeacherDropdown(); }
+            catch (e) { console.warn('[Stage 5] dropdown refresh failed:', e.message); }
+        }
     }
 
     function showTeacherEditor(existingTeacher) {
@@ -12538,6 +12574,7 @@
                     PinSalt:   t.PinSalt || '',
                 };
                 await SheetData.upsertTeacher(payload, pin || undefined);
+                refreshTeacherDropdownIfClassLoaded();
                 openManageTeachers();
             } catch (err) {
                 errEl.textContent = 'Save failed: ' + err.message;
@@ -12569,6 +12606,7 @@
             if (!/^\d{3,6}$/.test(pin)) { errEl.textContent = 'PIN must be 3-6 digits.'; return; }
             try {
                 await SheetData.upsertTeacher(teacher, pin);
+                refreshTeacherDropdownIfClassLoaded();
                 showSuccess('PIN updated.');
                 openManageTeachers();
             } catch (err) {
