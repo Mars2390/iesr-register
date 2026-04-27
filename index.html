@@ -342,7 +342,17 @@
     .logout-btn:hover {
       background: rgba(255,255,255,0.2);
     }
-    
+
+    /* Role-based visibility (Stage 9). Pattern: hide role-gated elements
+       by default; the matching body class (set on PIN verify) restores
+       native display via `revert`. Default body has no role class, so the
+       safe locked state shows nothing admin/teacher-gated until a
+       successful sign-in. CSV Import is intentionally NOT gated. */
+    .admin-only   { display: none !important; }
+    .teacher-only { display: none !important; }
+    body.role-admin   .admin-only   { display: revert !important; }
+    body.role-teacher .teacher-only { display: revert !important; }
+
     .register-body {
       font-family: Inter, system-ui, Segoe UI, Roboto, Arial;
       color: #0f1724;
@@ -3539,24 +3549,25 @@
 
         <div class="top-compact" style="margin-left:8px">
           <button id="markAll" class="btn-success">Mark All Present</button>
-          <button id="clearDay" class="danger-btn">Clear Day</button>
-          <button id="clearWeek" class="danger-btn">Clear Selected Week</button>
-          <button id="clearAllWeeks" class="danger-btn" style="background:#8b0000">Clear ALL Weeks</button>
+          <button id="clearDay" class="danger-btn admin-only">Clear Day</button>
+          <button id="clearWeek" class="danger-btn admin-only">Clear Selected Week</button>
+          <button id="clearAllWeeks" class="danger-btn admin-only" style="background:#8b0000">Clear ALL Weeks</button>
         </div>
       </div>
 
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <div class="crud-controls">
-          <button id="addStudentBtn" class="btn-primary">Add Student</button>
-          <button id="editStudentBtn" class="muted-btn">Edit Selected</button>
-          <button id="deleteStudentBtn" class="muted-btn">Delete Selected</button>
+          <button id="addStudentBtn" class="btn-primary admin-only">Add Student</button>
+          <button id="editStudentBtn" class="muted-btn admin-only">Edit Selected</button>
+          <button id="deleteStudentBtn" class="muted-btn admin-only">Delete Selected</button>
           <button id="importCsvBtn" class="muted-btn"><i class="fas fa-file-csv"></i> Import CSV</button>
-          <button id="manageTeachersBtn" class="muted-btn"><i class="fas fa-chalkboard-teacher"></i> Manage Teachers</button>
-          <button id="manageTimetableBtn" class="muted-btn"><i class="fas fa-calendar-alt"></i> Manage Timetable</button>
-          <button id="manageClassesBtn" class="muted-btn"><i class="fas fa-school"></i> Manage Classes</button>
-          <button id="manageSubjectsBtn" class="muted-btn"><i class="fas fa-book"></i> Manage Subjects</button>
-          <button id="schoolSettingsBtn" class="muted-btn"><i class="fas fa-cog"></i> School Settings</button>
-          <button id="migrateDataBtn" class="muted-btn" title="Copy CLASS_CONFIG (legacy hardcoded data) into the Sheet — classes, students, teachers, timetable, subjects"><i class="fas fa-database"></i> Migrate Data</button>
+          <button id="changeMyPinBtn" class="muted-btn teacher-only" title="Change your teacher PIN"><i class="fas fa-key"></i> Change My PIN</button>
+          <button id="manageTeachersBtn" class="muted-btn admin-only"><i class="fas fa-chalkboard-teacher"></i> Manage Teachers</button>
+          <button id="manageTimetableBtn" class="muted-btn admin-only"><i class="fas fa-calendar-alt"></i> Manage Timetable</button>
+          <button id="manageClassesBtn" class="muted-btn admin-only"><i class="fas fa-school"></i> Manage Classes</button>
+          <button id="manageSubjectsBtn" class="muted-btn admin-only"><i class="fas fa-book"></i> Manage Subjects</button>
+          <button id="schoolSettingsBtn" class="muted-btn admin-only"><i class="fas fa-cog"></i> School Settings</button>
+          <button id="migrateDataBtn" class="muted-btn admin-only" title="Copy CLASS_CONFIG (legacy hardcoded data) into the Sheet — classes, students, teachers, timetable, subjects"><i class="fas fa-database"></i> Migrate Data</button>
         </div>
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
           <!-- Submission code is sent automatically with each submission;
@@ -3564,26 +3575,26 @@
           <span class="small" style="background:#e6f3ff; padding:5px 10px; border-radius:20px; font-weight:600" title="Configured via admin panel">
             <i class="fas fa-key"></i> Auto-submit
           </span>
-          <button id="sendToAdminBtn" class="muted-btn">Send to Admin</button>
-          <button id="viewAdminBtn" class="muted-btn">View Admin Submissions</button>
+          <button id="sendToAdminBtn" class="muted-btn admin-only">Send to Admin</button>
+          <button id="viewAdminBtn" class="muted-btn admin-only">View Admin Submissions</button>
           <button id="behaviorTagsBtn" class="muted-btn">Behavior Tags</button>
           <button id="momentumBtn" class="muted-btn">Attendance Momentum</button>
-          <button id="editScheduleBtn" class="muted-btn">Edit Schedule</button>
+          <button id="editScheduleBtn" class="muted-btn admin-only">Edit Schedule</button>
           <button id="updateRegisterBtn" class="btn-primary">Update Register</button>
           <button id="saveWeek" class="muted-btn">Save Week</button>
           <button id="exportCsv" class="muted-btn">Export CSV</button>
           <button id="printBtn" class="muted-btn">Print</button>
           <button id="downloadBtn" class="muted-btn">Download HTML</button>
           <!-- HOA/HOD View Button -->
-          <button id="hoaHodViewBtn" class="btn-primary" style="background:#28a745">
+          <button id="hoaHodViewBtn" class="btn-primary admin-only" style="background:#28a745">
             <i class="fas fa-eye"></i> Department View
           </button>
           <!-- Global Admin View Button -->
-          <button id="globalAdminViewBtn" class="global-admin-btn">
+          <button id="globalAdminViewBtn" class="global-admin-btn admin-only">
             <i class="fas fa-globe"></i> Global Admin
           </button>
           <!-- Conflict Log Button (Global Admin only) -->
-          <button id="conflictLogBtn" class="global-admin-btn" style="background:#5a0080 !important" onclick="showGlobalAdminPinVerification('openConflictLogViewer','view Conflict Log')">
+          <button id="conflictLogBtn" class="global-admin-btn admin-only" style="background:#5a0080 !important" onclick="showGlobalAdminPinVerification('openConflictLogViewer','view Conflict Log')">
             <i class="fas fa-shield-alt"></i> Conflict Log
           </button>
         </div>
@@ -3778,6 +3789,35 @@
       </div>
     </div>
     
+    <!-- Stage 9: teacher self-service Change My PIN modal -->
+    <div id="changeMyPinModal" class="modal-backdrop" style="display:none">
+      <div class="modal">
+        <h3><i class="fas fa-key"></i> Change My PIN</h3>
+        <div class="small" style="margin-bottom:16px">
+          You are signed in as <strong id="changeMyPinWho">—</strong>. Enter your current PIN, then choose a new 4–6 digit PIN.
+        </div>
+        <div class="form-group">
+          <label for="changeMyPinCurrent">Current PIN</label>
+          <input type="password" id="changeMyPinCurrent" class="form-control" placeholder="Current PIN" autocomplete="off" maxlength="6">
+        </div>
+        <div class="form-group">
+          <label for="changeMyPinNew">New PIN</label>
+          <input type="password" id="changeMyPinNew" class="form-control" placeholder="New PIN (4–6 digits)" autocomplete="off" maxlength="6">
+        </div>
+        <div class="form-group">
+          <label for="changeMyPinConfirm">Confirm New PIN</label>
+          <input type="password" id="changeMyPinConfirm" class="form-control" placeholder="Re-enter new PIN" autocomplete="off" maxlength="6">
+        </div>
+        <div class="error-message" id="changeMyPinError" style="display:none">
+          <i class="fas fa-exclamation-circle"></i> <span id="changeMyPinErrorText"></span>
+        </div>
+        <div class="actions" style="margin-top:16px">
+          <button id="cancelChangeMyPinBtn" class="muted-btn">Cancel</button>
+          <button id="confirmChangeMyPinBtn" class="btn-primary"><i class="fas fa-check"></i> Update PIN</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Submission PIN Verification Modal (NO LONGER USED - KEPT FOR COMPATIBILITY) -->
     <div id="submissionPinModal" class="modal-backdrop double-verify-modal" style="display:none">
       <div class="modal">
@@ -6153,6 +6193,15 @@
         sessions: [],
         attendance: {},
         currentTeacher: null,
+        // Role-based access (Stage 9). Set by verifyRolePin on successful
+        // PIN match; cleared by confirmLogout. Default = no role, which the
+        // CSS treats as "hide everything role-gated".
+        isAdmin: false,
+        isTeacher: false,
+        currentRole: null,                 // 'admin' | 'teacher' | null
+        currentTeacherName: null,          // teacher's Name when role === 'teacher'
+        currentTeacherRecord: null,        // full Sheet record for PIN-change flow
+        assignedClasses: null,             // null = all (admin); array = teacher's classes
         intelligence: {
             studentStats: {},
             teacherStats: {},
@@ -6339,6 +6388,15 @@
       let sheetClasses = [];
       try { sheetClasses = SheetData.getCachedClasses().filter(c => c.Active !== false); } catch (e) {}
       if (!Array.isArray(sheetClasses) || !sheetClasses.length) return;
+
+      // Stage 9: when a teacher is signed in, scope the dropdown to the
+      // classes assigned to them in the Sheet's Teachers tab.
+      try {
+        if (state && state.isTeacher && Array.isArray(state.assignedClasses) && state.assignedClasses.length) {
+          const allowed = new Set(state.assignedClasses.map(s => String(s).trim()));
+          sheetClasses = sheetClasses.filter(c => allowed.has(String(c.ClassCode).trim()));
+        }
+      } catch (e) {}
 
       const currentSel = select.value;
 
@@ -6983,6 +7041,18 @@
     });
     document.getElementById('migrateDataBtn').addEventListener('click', function() {
         showAdminPinVerification('runMigrateData', 'migrate legacy data to Sheet');
+    });
+
+    // Stage 9: teacher self-service PIN change. Only the signed-in teacher
+    // can change their own PIN — never another teacher's. The button is
+    // CSS-hidden for non-teachers; this guard catches accidental wiring.
+    document.getElementById('changeMyPinBtn').addEventListener('click', function() {
+        if (!state.isTeacher) { alert('Only teachers can change their own PIN.'); return; }
+        if (!state.currentTeacherRecord) {
+            alert('Your teacher record is not in the Sheet yet. Ask the admin to add you under Manage Teachers, or run "Migrate Data".');
+            return;
+        }
+        openChangeMyPinModal();
     });
 
     document.getElementById('clearWeek').addEventListener('click', function() {
@@ -13094,6 +13164,67 @@
         return migrateLegacyData();
     }
     window.runMigrateData = runMigrateData;
+
+    // ================ STAGE 9: TEACHER CHANGE-MY-PIN ================
+    function openChangeMyPinModal() {
+        document.getElementById('changeMyPinWho').textContent = state.currentTeacherName || 'Teacher';
+        document.getElementById('changeMyPinCurrent').value = '';
+        document.getElementById('changeMyPinNew').value = '';
+        document.getElementById('changeMyPinConfirm').value = '';
+        document.getElementById('changeMyPinError').style.display = 'none';
+        document.getElementById('changeMyPinModal').style.display = 'flex';
+        document.getElementById('changeMyPinCurrent').focus();
+    }
+    function closeChangeMyPinModal() {
+        document.getElementById('changeMyPinModal').style.display = 'none';
+    }
+    function showChangeMyPinError(msg) {
+        document.getElementById('changeMyPinErrorText').textContent = msg;
+        document.getElementById('changeMyPinError').style.display = 'block';
+    }
+    async function submitChangeMyPin() {
+        const currentEl = document.getElementById('changeMyPinCurrent');
+        const newEl     = document.getElementById('changeMyPinNew');
+        const confirmEl = document.getElementById('changeMyPinConfirm');
+        const cur = currentEl.value.trim();
+        const nxt = newEl.value.trim();
+        const cnf = confirmEl.value.trim();
+
+        if (!cur || !nxt || !cnf)            { showChangeMyPinError('All fields are required.'); return; }
+        if (!/^\d{4,6}$/.test(nxt))          { showChangeMyPinError('New PIN must be 4–6 digits.'); return; }
+        if (nxt !== cnf)                     { showChangeMyPinError('New PIN and confirmation do not match.'); return; }
+        if (nxt === cur)                     { showChangeMyPinError('New PIN must differ from current PIN.'); return; }
+
+        const rec = state.currentTeacherRecord;
+        if (!rec) { showChangeMyPinError('Your teacher record is missing. Sign out and back in.'); return; }
+
+        // Re-verify the current PIN against the same record we matched at login.
+        let ok = false;
+        try { ok = await SheetData.verifyTeacherPin(rec, cur); }
+        catch (e) { showChangeMyPinError('Verification failed: ' + e.message); return; }
+        if (!ok) { showChangeMyPinError('Current PIN is incorrect.'); return; }
+
+        try {
+            await SheetData.upsertTeacher(rec, nxt);
+            // Refresh the cached record so a subsequent change in the same
+            // session uses the new salt/hash, not the old one.
+            try {
+                const fresh = SheetData.getCachedTeachers().find(t => String(t.TeacherId) === String(rec.TeacherId));
+                if (fresh) state.currentTeacherRecord = fresh;
+            } catch (e) {}
+            closeChangeMyPinModal();
+            alert('PIN updated. Use the new PIN next time you sign in.');
+        } catch (e) {
+            showChangeMyPinError('Update failed: ' + e.message);
+        }
+    }
+    document.getElementById('cancelChangeMyPinBtn').addEventListener('click', closeChangeMyPinModal);
+    document.getElementById('confirmChangeMyPinBtn').addEventListener('click', submitChangeMyPin);
+    document.getElementById('changeMyPinConfirm').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') submitChangeMyPin();
+    });
+    window.openChangeMyPinModal = openChangeMyPinModal;
+    // =================== END STAGE 9 ===================
     // =================== END STAGE 5 MIGRATION ===================
 
     // ===================== STAGE 7: MANAGE CLASSES =====================
@@ -14317,6 +14448,15 @@
         state.sessions = [];
         state.attendance = {};
         state.currentTeacher = null;
+        // Stage 9: drop role flags so admin-only UI is hidden again until
+        // the next PIN verify and CSS reverts to the default (no role).
+        state.isAdmin = false;
+        state.isTeacher = false;
+        state.currentRole = null;
+        state.currentTeacherName = null;
+        state.currentTeacherRecord = null;
+        state.assignedClasses = null;
+        document.body.classList.remove('role-admin', 'role-teacher');
         state.intelligence = {
             studentStats: {},
             teacherStats: {},
@@ -15460,6 +15600,17 @@
         return;
       }
       if (ok) {
+        // Stage 9: mark session as admin and let CSS reveal admin-only UI.
+        if (typeof state !== 'undefined') {
+          state.isAdmin = true;
+          state.isTeacher = false;
+          state.currentRole = 'admin';
+          state.currentTeacherName = null;
+          state.currentTeacherRecord = null;
+          state.assignedClasses = null;     // null = unrestricted
+        }
+        document.body.classList.remove('role-teacher');
+        document.body.classList.add('role-admin');
         document.getElementById('rolePinModal').classList.remove('active');
         openTeacherAdminRegister(pin);
       } else {
@@ -15475,11 +15626,17 @@
       // Stage 5: check Sheet teachers (PBKDF2) first, then any CLASS_CONFIG
       // teacherPin (legacy toy hash) as fallback. Either match unlocks.
       let found = false;
+      let matchedTeacher = null;     // Sheet record, when matched via PBKDF2
+      let matchedLegacyName = null;  // Name string, when matched via CLASS_CONFIG
       try {
         const sheetTeachers = SheetData.getCachedTeachers();
         for (const t of sheetTeachers) {
           if (t && t.PinHash && t.PinSalt && t.Active !== false) {
-            if (await SheetData.verifyTeacherPin(t, pin)) { found = true; break; }
+            if (await SheetData.verifyTeacherPin(t, pin)) {
+              found = true;
+              matchedTeacher = t;
+              break;
+            }
           }
         }
       } catch (e) {
@@ -15490,14 +15647,42 @@
         for (const cls in CLASS_CONFIG) {
           const pins = CLASS_CONFIG[cls].teacherPins || {};
           for (const teacher in pins) {
-            if (enteredHash === pins[teacher]) { found = true; break; }
+            if (enteredHash === pins[teacher]) {
+              found = true;
+              matchedLegacyName = teacher;
+              break;
+            }
           }
           if (found) break;
         }
       }
       if (found) {
+        // Stage 9: scope this session to the matched teacher.
+        // Sheet record gives Name + Classes (CSV). Legacy fallback only
+        // gives a name; in that case we leave assignedClasses = null so
+        // the dropdown isn't accidentally locked to nothing.
+        if (typeof state !== 'undefined') {
+          state.isAdmin = false;
+          state.isTeacher = true;
+          state.currentRole = 'teacher';
+          if (matchedTeacher) {
+            state.currentTeacherName = matchedTeacher.Name || null;
+            state.currentTeacherRecord = matchedTeacher;
+            const csv = String(matchedTeacher.Classes || '').trim();
+            state.assignedClasses = csv
+              ? csv.split(',').map(s => s.trim()).filter(Boolean)
+              : null;
+          } else {
+            state.currentTeacherName = matchedLegacyName || null;
+            state.currentTeacherRecord = null;
+            state.assignedClasses = null;
+          }
+        }
+        document.body.classList.remove('role-admin');
+        document.body.classList.add('role-teacher');
         document.getElementById('rolePinModal').classList.remove('active');
         openTeacherAdminRegister(pin);
+        if (typeof populateClassDropdown === 'function') populateClassDropdown();
       } else {
         errEl.textContent = 'Invalid teacher PIN. Please check your PIN.';
         errEl.classList.add('show');
