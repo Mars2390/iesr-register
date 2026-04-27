@@ -32,7 +32,12 @@ const SHEETS = {
   Teachers:   ['TeacherId','Name','Classes','PinHash','PinSalt','Active','UpdatedAt'],
   Subjects:   ['SubjectCode','SubjectName','Class','Active','UpdatedAt'],
   Timetable:  ['TimetableId','Class','Day','StartTime','EndTime','Subject','TeacherId','UpdatedAt'],
-  Attendance: ['SubmissionId','Class','WeekStart','Teacher','StudentAdmNo','Date','SessionId','Subject','Status','TagsJSON','Notes','SubmittedAt'],
+  // Stage 10: StudentName appended at the end (not inserted) so existing
+  // deployments that already have 12-column Attendance data stay aligned —
+  // getSheet_'s realign only touches row 1, so old rows simply gain an
+  // empty 13th cell. Reorder visually in the Sheet UI if you want it next
+  // to StudentAdmNo; the schema treats columns by name, not position.
+  Attendance: ['SubmissionId','Class','WeekStart','Teacher','StudentAdmNo','Date','SessionId','Subject','Status','TagsJSON','Notes','SubmittedAt','StudentName'],
 };
 
 // ===== sheet helpers =====
@@ -179,14 +184,38 @@ function normalizeTimetable_(obj) {
 function writeAttendanceBatch_(records) {
   const sh = getSheet_('Attendance');
   const nowIso = new Date().toISOString();
+
+  // Stage 10: lazy AdmissionNo -> FullName lookup from the Students tab.
+  // Built once per batch (not per row) so a 50-row submission costs one
+  // readAll_('Students'). Used as a fallback when the client didn't send
+  // studentName in the record (older clients, or the legacy submission
+  // shape expanded by expandSubmission_).
+  let _nameMap = null;
+  function lookupName_(admNo) {
+    if (!admNo) return '';
+    if (!_nameMap) {
+      _nameMap = {};
+      try {
+        readAll_('Students').forEach(function(s) {
+          if (s && s.AdmissionNo) _nameMap[String(s.AdmissionNo)] = s.FullName || '';
+        });
+      } catch (e) {}
+    }
+    return _nameMap[String(admNo)] || '';
+  }
+
   const rows = (records || []).map(function(r) {
     const tagsJson = r.tags ? (typeof r.tags === 'string' ? r.tags : JSON.stringify(r.tags)) : '';
+    const admNo = r.studentAdmNo || r.studentId || '';
+    const name = String(r.studentName || r.StudentName || r.Student_Name || '').trim()
+              || lookupName_(admNo);
     return [
       r.submissionId || Utilities.getUuid(),
       r['class'] || '', r.weekStart || '', r.teacher || '',
-      r.studentAdmNo || r.studentId || '', r.date || '', r.sessionId || '',
+      admNo, r.date || '', r.sessionId || '',
       r.subject || '', r.status || '', tagsJson, r.notes || '',
-      r.submittedAt || nowIso
+      r.submittedAt || nowIso,
+      name
     ];
   });
   if (rows.length) sh.getRange(sh.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
@@ -209,7 +238,10 @@ function expandSubmission_(sub) {
       weekStart: sub.weekStart || '', teacher: sub.teacher || '',
       studentAdmNo: studentAdmNo, date: date, sessionId: sessionId,
       subject: rec.subject || '', status: rec.status,
-      tags: rec.tags || null, notes: rec.notes || '', submittedAt: submittedAt
+      tags: rec.tags || null, notes: rec.notes || '', submittedAt: submittedAt,
+      // Stage 10: pass any client-provided name through; writeAttendanceBatch_
+      // backfills from the Students tab if this is empty.
+      studentName: rec.studentName || rec.Student_Name || ''
     });
   });
   return out;

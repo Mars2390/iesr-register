@@ -3568,6 +3568,7 @@
           <button id="manageSubjectsBtn" class="muted-btn admin-only"><i class="fas fa-book"></i> Manage Subjects</button>
           <button id="schoolSettingsBtn" class="muted-btn admin-only"><i class="fas fa-cog"></i> School Settings</button>
           <button id="migrateDataBtn" class="muted-btn admin-only" title="Copy CLASS_CONFIG (legacy hardcoded data) into the Sheet — classes, students, teachers, timetable, subjects"><i class="fas fa-database"></i> Migrate Data</button>
+          <button id="insightsBtn" class="muted-btn admin-only" title="School-wide attendance insights computed from the Attendance tab"><i class="fas fa-chart-line"></i> Insights</button>
         </div>
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
           <!-- Submission code is sent automatically with each submission;
@@ -6783,6 +6784,7 @@
                 'openManageSubjects': openManageSubjects,
                 'openSchoolSettings': openSchoolSettings,
                 'runMigrateData': runMigrateData,
+                'openInsightsDashboard': openInsightsDashboard,
             };
             const fn = callbackMap[callbackName] || window[callbackName];
             if (typeof fn === 'function') fn();
@@ -7041,6 +7043,9 @@
     });
     document.getElementById('migrateDataBtn').addEventListener('click', function() {
         showAdminPinVerification('runMigrateData', 'migrate legacy data to Sheet');
+    });
+    document.getElementById('insightsBtn').addEventListener('click', function() {
+        showAdminPinVerification('openInsightsDashboard', 'view attendance insights');
     });
 
     // Stage 9: teacher self-service PIN change. Only the signed-in teacher
@@ -8356,12 +8361,15 @@
             </div>
         `;
         
-        openModal(html);
-        
-        // Auto-close after 3 seconds
-        setTimeout(() => {
-            closeModal();
-        }, 3000);
+        // Stage 9 fix: do NOT openModal here. The caller (openGlobalAdminView)
+        // immediately calls showGlobalAdminDashboard, which writes the dashboard
+        // into the same #modalContent. Opening + auto-closing the warning was
+        // tearing down the dashboard 3 s after admin opened it. Surface the
+        // validation summary to the console instead — it's diagnostic-only.
+        try {
+            console.warn('[Global Admin] Data integrity issues:',
+                validationResult.issues, validationResult);
+        } catch (e) {}
     }
 
     function getStudentName(admissionNo) {
@@ -13164,6 +13172,240 @@
         return migrateLegacyData();
     }
     window.runMigrateData = runMigrateData;
+
+    // ===================== STAGE 10: INSIGHTS DASHBOARD =====================
+    // Admin-only school-wide attendance metrics computed client-side from
+    // the Attendance tab. Tolerant of TitleCase (server) and camelCase
+    // (older clients) field names because the queue has been writing both
+    // shapes over the lifetime of this app.
+    function _norm(r) {
+        if (!r) return null;
+        const status = String(r.Status ?? r.status ?? '').toUpperCase();
+        const date = String(r.Date ?? r.date ?? '');
+        const admNo = String(r.StudentAdmNo ?? r.studentAdmNo ?? r.studentId ?? r.AdmissionNo ?? '');
+        if (!date || !admNo || !status) return null;
+        return {
+            class: String(r.Class ?? r.class ?? ''),
+            teacher: String(r.Teacher ?? r.teacher ?? ''),
+            admNo,
+            name: String(r.StudentName ?? r.studentName ?? r.Student_Name ?? ''),
+            date,
+            weekStart: String(r.WeekStart ?? r.weekStart ?? ''),
+            subject: String(r.Subject ?? r.subject ?? ''),
+            status,
+        };
+    }
+
+    function _isoWeekStart(dateStr) {
+        // Monday-anchored week key (YYYY-MM-DD of the Monday) so trends
+        // bucket cleanly. Falls back to the raw string if parsing fails.
+        const d = new Date(dateStr + 'T12:00:00');
+        if (isNaN(d.getTime())) return dateStr;
+        const dow = (d.getDay() + 6) % 7;     // Mon=0, Sun=6
+        d.setDate(d.getDate() - dow);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${dd}`;
+    }
+
+    function _computeInsights(rows, classRoster) {
+        // classRoster: { ClassCode: studentCount } from cached Students,
+        // used as the denominator for "expected submissions" so the
+        // teacher submission-rate metric isn't gameable by simply marking
+        // fewer students.
+        const studentAgg = {};                // admNo -> {name, present, absent, late, total}
+        const classAgg = {};                  // class -> {present, total}
+        const weekAgg = {};                   // ISO Mon -> {present, total}
+        const teacherAgg = {};                // teacher -> {submissions:Set<weekStart|class>, marked:int}
+
+        rows.forEach(function(r) {
+            const key = r.admNo;
+            if (!studentAgg[key]) {
+                studentAgg[key] = { admNo: key, name: r.name || key, class: r.class, present: 0, absent: 0, late: 0, total: 0 };
+            }
+            const s = studentAgg[key];
+            if (!s.name && r.name) s.name = r.name;
+            s.total++;
+            if (r.status === 'P') s.present++;
+            else if (r.status === 'L') { s.late++; s.present++; }
+            else if (r.status === 'A') s.absent++;
+
+            if (r.class) {
+                if (!classAgg[r.class]) classAgg[r.class] = { class: r.class, present: 0, total: 0 };
+                classAgg[r.class].total++;
+                if (r.status === 'P' || r.status === 'L') classAgg[r.class].present++;
+            }
+
+            const wk = r.weekStart || _isoWeekStart(r.date);
+            if (!weekAgg[wk]) weekAgg[wk] = { week: wk, present: 0, total: 0 };
+            weekAgg[wk].total++;
+            if (r.status === 'P' || r.status === 'L') weekAgg[wk].present++;
+
+            if (r.teacher) {
+                if (!teacherAgg[r.teacher]) teacherAgg[r.teacher] = { teacher: r.teacher, submissions: new Set(), marked: 0 };
+                teacherAgg[r.teacher].submissions.add((r.weekStart || wk) + '|' + r.class);
+                teacherAgg[r.teacher].marked++;
+            }
+        });
+
+        // 1. Most absent students (top 10 by absent count, tie-broken by absence rate)
+        const mostAbsent = Object.values(studentAgg)
+            .filter(s => s.absent > 0)
+            .map(s => Object.assign({}, s, { rate: s.total ? Math.round((s.absent / s.total) * 100) : 0 }))
+            .sort((a, b) => b.absent - a.absent || b.rate - a.rate)
+            .slice(0, 10);
+
+        // 2. Attendance rate by class
+        const byClass = Object.values(classAgg)
+            .map(c => Object.assign({}, c, { rate: c.total ? Math.round((c.present / c.total) * 100) : 0 }))
+            .sort((a, b) => b.rate - a.rate);
+
+        // 3. Weekly trend (last 8 weeks). Direction is sign of (last - first).
+        const weeklyTrend = Object.values(weekAgg)
+            .map(w => Object.assign({}, w, { rate: w.total ? Math.round((w.present / w.total) * 100) : 0 }))
+            .sort((a, b) => a.week.localeCompare(b.week))
+            .slice(-8);
+        let trendArrow = '→', trendDelta = 0;
+        if (weeklyTrend.length >= 2) {
+            trendDelta = weeklyTrend[weeklyTrend.length - 1].rate - weeklyTrend[0].rate;
+            trendArrow = trendDelta > 1 ? '↑' : trendDelta < -1 ? '↓' : '→';
+        }
+
+        // 4. Perfect attendance (no absences across all observed sessions)
+        const perfect = Object.values(studentAgg)
+            .filter(s => s.absent === 0 && s.total >= 5)   // require >=5 sessions to be meaningful
+            .sort((a, b) => b.total - a.total)
+            .slice(0, 50);
+
+        // 5. Teachers by submission activity (weekly submissions count + marks total)
+        const teacherStats = Object.values(teacherAgg).map(t => ({
+            teacher: t.teacher,
+            submissions: t.submissions.size,
+            marks: t.marked,
+        })).sort((a, b) => b.submissions - a.submissions);
+        const topTeachers    = teacherStats.slice(0, 5);
+        const bottomTeachers = teacherStats.slice().sort((a, b) => a.submissions - b.submissions).slice(0, 5);
+
+        // 6. Weekly summary (this and last week)
+        const sortedWeeks = Object.values(weekAgg).sort((a, b) => a.week.localeCompare(b.week));
+        const thisWeek = sortedWeeks[sortedWeeks.length - 1] || null;
+        const lastWeek = sortedWeeks[sortedWeeks.length - 2] || null;
+        const weeklySummary = { thisWeek, lastWeek };
+
+        return { mostAbsent, byClass, weeklyTrend, trendArrow, trendDelta, perfect, topTeachers, bottomTeachers, weeklySummary, totalRows: rows.length };
+    }
+
+    function _esc(s) {
+        return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function _renderInsightsHtml(i) {
+        const ws = i.weeklySummary || {};
+        const tw = ws.thisWeek, lw = ws.lastWeek;
+        const card = (title, body) => `
+            <div style="background:#fff;border:1px solid #e0e6ee;border-radius:8px;padding:14px;flex:1 1 360px;min-width:300px">
+              <div style="font-weight:700;margin-bottom:8px;color:#0b66ff">${_esc(title)}</div>
+              ${body}
+            </div>`;
+
+        const mostAbsentHtml = i.mostAbsent.length
+            ? `<table style="width:100%;font-size:13px;border-collapse:collapse">
+                 <thead><tr style="text-align:left;border-bottom:1px solid #e0e6ee">
+                   <th style="padding:4px 6px">#</th><th style="padding:4px 6px">Student</th><th style="padding:4px 6px">Class</th><th style="padding:4px 6px;text-align:right">Absent</th><th style="padding:4px 6px;text-align:right">Rate</th>
+                 </tr></thead>
+                 <tbody>${i.mostAbsent.map((s, n) => `
+                   <tr><td style="padding:4px 6px">${n+1}</td><td style="padding:4px 6px">${_esc(s.name)}<div class="subtle" style="font-size:11px">${_esc(s.admNo)}</div></td><td style="padding:4px 6px"><code>${_esc(s.class)}</code></td><td style="padding:4px 6px;text-align:right">${s.absent}</td><td style="padding:4px 6px;text-align:right">${s.rate}%</td></tr>`).join('')}
+                 </tbody></table>`
+            : '<div class="subtle">No absences recorded yet.</div>';
+
+        const byClassHtml = i.byClass.length
+            ? `<table style="width:100%;font-size:13px;border-collapse:collapse">
+                 <thead><tr style="text-align:left;border-bottom:1px solid #e0e6ee"><th style="padding:4px 6px">Class</th><th style="padding:4px 6px;text-align:right">Sessions</th><th style="padding:4px 6px;text-align:right">Rate</th></tr></thead>
+                 <tbody>${i.byClass.map(c => `
+                   <tr><td style="padding:4px 6px"><code>${_esc(c.class)}</code></td><td style="padding:4px 6px;text-align:right">${c.total}</td><td style="padding:4px 6px;text-align:right;font-weight:600;color:${c.rate >= 80 ? '#28a745' : c.rate >= 60 ? '#d97706' : '#dc3545'}">${c.rate}%</td></tr>`).join('')}
+                 </tbody></table>`
+            : '<div class="subtle">No class data.</div>';
+
+        const trendHtml = i.weeklyTrend.length
+            ? `<div style="font-size:13px">
+                 <div style="font-size:24px;font-weight:700;color:${i.trendDelta > 0 ? '#28a745' : i.trendDelta < 0 ? '#dc3545' : '#666'}">${i.trendArrow} ${i.trendDelta >= 0 ? '+' : ''}${i.trendDelta} pts</div>
+                 <div class="subtle" style="margin-bottom:8px">Last ${i.weeklyTrend.length} week(s)</div>
+                 <table style="width:100%;font-size:12px;border-collapse:collapse">
+                   <thead><tr style="text-align:left;border-bottom:1px solid #e0e6ee"><th style="padding:3px 6px">Week of</th><th style="padding:3px 6px;text-align:right">Sessions</th><th style="padding:3px 6px;text-align:right">Rate</th></tr></thead>
+                   <tbody>${i.weeklyTrend.map(w => `<tr><td style="padding:3px 6px">${_esc(w.week)}</td><td style="padding:3px 6px;text-align:right">${w.total}</td><td style="padding:3px 6px;text-align:right">${w.rate}%</td></tr>`).join('')}</tbody>
+                 </table>
+               </div>`
+            : '<div class="subtle">Not enough weekly data yet.</div>';
+
+        const perfectHtml = i.perfect.length
+            ? `<div class="subtle" style="margin-bottom:6px">${i.perfect.length} student(s) with no absences (≥5 sessions).</div>
+               <div style="max-height:200px;overflow:auto;font-size:13px">
+                 ${i.perfect.map(s => `<div style="padding:3px 0;border-bottom:1px dashed #eef">${_esc(s.name)} <span class="subtle">— ${_esc(s.class)} · ${s.total} sessions</span></div>`).join('')}
+               </div>`
+            : '<div class="subtle">No student has yet logged ≥5 sessions without absence.</div>';
+
+        const teacherList = (arr) => arr.length
+            ? `<table style="width:100%;font-size:13px;border-collapse:collapse">
+                 <thead><tr style="text-align:left;border-bottom:1px solid #e0e6ee"><th style="padding:3px 6px">Teacher</th><th style="padding:3px 6px;text-align:right">Submissions</th><th style="padding:3px 6px;text-align:right">Marks</th></tr></thead>
+                 <tbody>${arr.map(t => `<tr><td style="padding:3px 6px">${_esc(t.teacher)}</td><td style="padding:3px 6px;text-align:right">${t.submissions}</td><td style="padding:3px 6px;text-align:right">${t.marks}</td></tr>`).join('')}</tbody>
+               </table>`
+            : '<div class="subtle">No teacher activity.</div>';
+
+        const summaryRow = (label, w) => w
+            ? `<tr><td style="padding:4px 6px">${label}</td><td style="padding:4px 6px"><code>${_esc(w.week)}</code></td><td style="padding:4px 6px;text-align:right">${w.total}</td><td style="padding:4px 6px;text-align:right">${w.present}</td><td style="padding:4px 6px;text-align:right">${w.total - w.present}</td><td style="padding:4px 6px;text-align:right;font-weight:600">${w.total ? Math.round((w.present / w.total) * 100) : 0}%</td></tr>`
+            : `<tr><td style="padding:4px 6px">${label}</td><td colspan="5" class="subtle" style="padding:4px 6px">No data</td></tr>`;
+
+        const weeklySummaryHtml = `
+            <table style="width:100%;font-size:13px;border-collapse:collapse">
+              <thead><tr style="text-align:left;border-bottom:1px solid #e0e6ee">
+                <th style="padding:4px 6px"></th><th style="padding:4px 6px">Week</th><th style="padding:4px 6px;text-align:right">Sessions</th><th style="padding:4px 6px;text-align:right">Present</th><th style="padding:4px 6px;text-align:right">Absent</th><th style="padding:4px 6px;text-align:right">Rate</th>
+              </tr></thead>
+              <tbody>${summaryRow('This week', tw)}${summaryRow('Last week', lw)}</tbody>
+            </table>`;
+
+        return `
+            <h3><i class="fas fa-chart-line"></i> Attendance Insights</h3>
+            <div class="small subtle" style="margin-bottom:12px">Computed from ${i.totalRows} attendance records in the Sheet.</div>
+            <div style="display:flex;gap:12px;flex-wrap:wrap">
+              ${card('Most Absent Students (Top 10)', mostAbsentHtml)}
+              ${card('Attendance Rate by Class', byClassHtml)}
+              ${card('Weekly Trend', trendHtml)}
+              ${card('Perfect Attendance', perfectHtml)}
+              ${card('Top Teachers by Submission Activity', teacherList(i.topTeachers))}
+              ${card('Lowest Teacher Submission Activity', teacherList(i.bottomTeachers))}
+              ${card('Weekly Summary', weeklySummaryHtml)}
+            </div>
+            <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
+              <button id="insightsRefreshBtn" class="muted-btn"><i class="fas fa-sync"></i> Refresh</button>
+              <button onclick="closeModal()" class="btn-primary">Close</button>
+            </div>`;
+    }
+
+    async function openInsightsDashboard() {
+        if (!navigator.onLine) {
+            alert('Insights require an internet connection — data is loaded live from the Sheet.');
+            return;
+        }
+        openModal('<h3><i class="fas fa-chart-line"></i> Attendance Insights</h3><div class="subtle" style="padding:24px;text-align:center"><i class="fas fa-spinner fa-spin"></i> Loading attendance data…</div>');
+        try {
+            const raw = await SheetsAPI.getAttendance({});  // no filter = school-wide
+            const rows = (Array.isArray(raw) ? raw : []).map(_norm).filter(Boolean);
+            if (!rows.length) {
+                openModal('<h3><i class="fas fa-chart-line"></i> Attendance Insights</h3><div class="subtle" style="padding:24px">No attendance records yet. Have teachers submit a week and try again.</div><div style="display:flex;justify-content:flex-end"><button onclick="closeModal()" class="btn-primary">Close</button></div>');
+                return;
+            }
+            const insights = _computeInsights(rows);
+            openModal(_renderInsightsHtml(insights));
+            const refreshBtn = document.getElementById('insightsRefreshBtn');
+            if (refreshBtn) refreshBtn.addEventListener('click', openInsightsDashboard);
+        } catch (e) {
+            openModal(`<h3><i class="fas fa-chart-line"></i> Attendance Insights</h3><div class="error-message" style="display:block">Failed to load attendance: ${_esc(e.message || e)}</div><div style="display:flex;justify-content:flex-end;margin-top:12px"><button onclick="closeModal()" class="btn-primary">Close</button></div>`);
+        }
+    }
+    window.openInsightsDashboard = openInsightsDashboard;
+    // ================== END STAGE 10 INSIGHTS DASHBOARD ==================
 
     // ================ STAGE 9: TEACHER CHANGE-MY-PIN ================
     function openChangeMyPinModal() {
