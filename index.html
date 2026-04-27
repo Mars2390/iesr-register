@@ -3552,6 +3552,7 @@
           <button id="deleteStudentBtn" class="muted-btn">Delete Selected</button>
           <button id="importCsvBtn" class="muted-btn"><i class="fas fa-file-csv"></i> Import CSV</button>
           <button id="manageTeachersBtn" class="muted-btn"><i class="fas fa-chalkboard-teacher"></i> Manage Teachers</button>
+          <button id="manageTimetableBtn" class="muted-btn"><i class="fas fa-calendar-alt"></i> Manage Timetable</button>
         </div>
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
           <!-- Submission code is sent automatically with each submission;
@@ -4891,9 +4892,10 @@
     // plaintext. The hashing path is duplicated here intentionally —
     // PinManager keeps its hasher private to its slots.
     const SheetData = (() => {
-      const STUDENTS_CACHE_KEY = 'iesr_sheet_students_cache_v1';
-      const TEACHERS_CACHE_KEY = 'iesr_sheet_teachers_cache_v1';
-      const CLASSES_CACHE_KEY  = 'iesr_sheet_classes_cache_v1';
+      const STUDENTS_CACHE_KEY  = 'iesr_sheet_students_cache_v1';
+      const TEACHERS_CACHE_KEY  = 'iesr_sheet_teachers_cache_v1';
+      const CLASSES_CACHE_KEY   = 'iesr_sheet_classes_cache_v1';
+      const TIMETABLE_CACHE_KEY = 'iesr_sheet_timetable_cache_v1';
       const LAST_SYNC_KEY = 'iesr_sheet_data_last_sync';
       const PBKDF2_ITERATIONS = 100000;
 
@@ -4969,6 +4971,30 @@
           Active:      c.Active === false ? false : true,
         };
       }
+      // Timetable adapters (Stage 6)
+      function timetableFromSheet(t) {
+        return {
+          TimetableId: String(t.TimetableId || ''),
+          Class:       String(t.Class || ''),
+          Day:         String(t.Day || ''),
+          StartTime:   String(t.StartTime || ''),
+          EndTime:     String(t.EndTime || ''),
+          Subject:     String(t.Subject || ''),
+          TeacherId:   String(t.TeacherId || ''),
+          _source:     'sheet',
+        };
+      }
+      function timetableToSheet(t) {
+        return {
+          TimetableId: String(t.TimetableId || '').trim(),
+          Class:       String(t.Class || '').trim(),
+          Day:         String(t.Day || '').trim().toUpperCase(),
+          StartTime:   String(t.StartTime || '').trim(),
+          EndTime:     String(t.EndTime || '').trim(),
+          Subject:     String(t.Subject || '').trim(),
+          TeacherId:   String(t.TeacherId || '').trim(),
+        };
+      }
 
       // ----- crypto helpers (mirror PinManager's PBKDF2) -----
       function bytesToHex(bytes) {
@@ -5022,11 +5048,27 @@
       function getCachedStudents()                { return readCache(STUDENTS_CACHE_KEY).map(studentFromSheet); }
       function getCachedStudentsForClass(cls)     { return getCachedStudents().filter(s => s.Class === cls); }
       function getCachedTeachers()                { return readCache(TEACHERS_CACHE_KEY).map(teacherFromSheet); }
-      function getCachedTeachersForClass(cls)     { return getCachedTeachers().filter(t => Array.isArray(t.Classes) && t.Classes.indexOf(cls) >= 0); }
+      function getCachedTeachersForClass(cls) {
+        // Case-insensitive match: admin's typed class code in Manage Teachers
+        // may not match currentClass casing exactly. Compare upper-case both
+        // sides.
+        const target = String(cls || '').toUpperCase();
+        if (!target) return [];
+        return getCachedTeachers().filter(t =>
+          Array.isArray(t.Classes) && t.Classes.some(c => String(c).toUpperCase() === target)
+        );
+      }
       function getRawCachedTeachers()             { return readCache(TEACHERS_CACHE_KEY); }
       // Class reads (Stage 5)
       function getCachedClasses()                 { return readCache(CLASSES_CACHE_KEY).map(classFromSheet); }
       function getCachedClassByCode(code)         { return getCachedClasses().find(c => c.ClassCode === code) || null; }
+      // Timetable reads (Stage 6)
+      function getCachedTimetable()               { return readCache(TIMETABLE_CACHE_KEY).map(timetableFromSheet); }
+      function getCachedTimetableForClass(cls) {
+        const target = String(cls || '').toUpperCase();
+        if (!target) return [];
+        return getCachedTimetable().filter(t => String(t.Class || '').toUpperCase() === target);
+      }
 
       // ----- refresh (network) -----
       async function refreshStudents() {
@@ -5062,8 +5104,19 @@
           return getCachedClasses();
         }
       }
+      async function refreshTimetable() {
+        try {
+          const rows = await SheetsAPI.getTimetable();
+          const arr = Array.isArray(rows) ? rows : [];
+          writeCache(TIMETABLE_CACHE_KEY, arr);
+          return arr.map(timetableFromSheet);
+        } catch (e) {
+          console.warn('[SheetData] refreshTimetable failed:', e.message);
+          return getCachedTimetable();
+        }
+      }
       async function refreshAll() {
-        await Promise.allSettled([refreshStudents(), refreshTeachers(), refreshClasses()]);
+        await Promise.allSettled([refreshStudents(), refreshTeachers(), refreshClasses(), refreshTimetable()]);
         try { localStorage.setItem(LAST_SYNC_KEY, new Date().toISOString()); } catch (e) {}
       }
 
@@ -5183,22 +5236,52 @@
         return _runChunkedBulk(arr, SheetsAPI.bulkUpsertTeachers, refreshTeachers, 'bulkUpsertTeachers');
       }
 
+      // ----- timetable writes (Stage 6) -----
+      async function upsertTimetable(entry) {
+        const sheetForm = timetableToSheet(entry);
+        if (!sheetForm.Class)   throw new Error('Class is required');
+        if (!sheetForm.Day)     throw new Error('Day is required');
+        if (!sheetForm.Subject) throw new Error('Subject is required');
+        if (!sheetForm.TimetableId) {
+          sheetForm.TimetableId = (typeof crypto !== 'undefined' && crypto.randomUUID)
+            ? crypto.randomUUID()
+            : 'tt_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+        }
+        const result = await SheetsAPI.upsertTimetable(sheetForm);
+        const cache = readCache(TIMETABLE_CACHE_KEY);
+        const idx = cache.findIndex(c => String(c.TimetableId) === sheetForm.TimetableId);
+        if (idx >= 0) cache[idx] = sheetForm; else cache.push(sheetForm);
+        writeCache(TIMETABLE_CACHE_KEY, cache);
+        return result;
+      }
+      async function deleteTimetable(id) {
+        if (!id) throw new Error('TimetableId is required');
+        const result = await SheetsAPI.deleteTimetable(id);
+        const cache = readCache(TIMETABLE_CACHE_KEY).filter(c => String(c.TimetableId) !== String(id));
+        writeCache(TIMETABLE_CACHE_KEY, cache);
+        return result;
+      }
+
       return {
         // adapters (exposed for tests/debug)
-        studentFromSheet, studentToSheet,
-        teacherFromSheet, teacherToSheet,
-        classFromSheet,   classToSheet,
+        studentFromSheet,   studentToSheet,
+        teacherFromSheet,   teacherToSheet,
+        classFromSheet,     classToSheet,
+        timetableFromSheet, timetableToSheet,
         // reads
         getCachedStudents, getCachedStudentsForClass,
         getCachedTeachers, getCachedTeachersForClass, getRawCachedTeachers,
         getCachedClasses,  getCachedClassByCode,
-        refreshStudents, refreshTeachers, refreshClasses, refreshAll,
+        getCachedTimetable, getCachedTimetableForClass,
+        refreshStudents, refreshTeachers, refreshClasses, refreshTimetable, refreshAll,
         // student writes
         upsertStudent, deleteStudent, bulkUpsertStudents,
         // teacher writes
         upsertTeacher, deleteTeacher, bulkUpsertTeachers,
         // class writes (Stage 5)
         upsertClass, deleteClass, bulkUpsertClasses,
+        // timetable writes (Stage 6)
+        upsertTimetable, deleteTimetable,
         // crypto
         hashTeacherPin, verifyTeacherPin,
       };
@@ -6194,6 +6277,14 @@
 
       try {
         const sheetTeachers = SheetData.getCachedTeachersForClass(currentClass);
+        // Diagnostic: confirms what the dropdown is being given. If the
+        // dropdown still doesn't show a newly-added teacher, this log tells
+        // you whether the cache is missing the record (refresh problem) or
+        // the filter is dropping it (case/class mismatch).
+        console.log('[populateTeacherDropdown] currentClass=' + currentClass +
+          ' legacy=' + legacy.length +
+          ' sheet(filtered)=' + sheetTeachers.length +
+          ' sheet(total)=' + SheetData.getCachedTeachers().length);
         sheetTeachers.forEach(t => { if (t && t.Active !== false) append(t.Name); });
       } catch (e) {
         console.warn('[Stage 5] could not merge Sheet teachers:', e.message);
@@ -6510,6 +6601,7 @@
                 'openHoaHodViewAfterAuth': openHoaHodViewAfterAuth,
                 'importStudentsCsv': importStudentsCsv,
                 'openManageTeachers': openManageTeachers,
+                'openManageTimetable': openManageTimetable,
             };
             const fn = callbackMap[callbackName] || window[callbackName];
             if (typeof fn === 'function') fn();
@@ -6753,6 +6845,9 @@
     });
     document.getElementById('manageTeachersBtn').addEventListener('click', function() {
         showAdminPinVerification('openManageTeachers', 'manage teachers');
+    });
+    document.getElementById('manageTimetableBtn').addEventListener('click', function() {
+        showAdminPinVerification('openManageTimetable', 'manage timetable');
     });
 
     document.getElementById('clearWeek').addEventListener('click', function() {
@@ -12442,19 +12537,27 @@
             area.innerHTML = '<div class="small" style="color:#777">No teachers yet. Click "+ Add Teacher" to create the first one.</div>';
             return;
         }
-        const rowsHtml = teachers.map(t => `
-            <tr data-teacher-id="${escapeHtml(t.TeacherId)}">
-                <td style="padding:6px">${escapeHtml(t.Name || '')}</td>
-                <td style="padding:6px">${escapeHtml((t.Classes || []).join(', '))}</td>
-                <td style="padding:6px">${t.PinHash ? '<span title="PIN set">●●●●</span>' : '<span style="color:#aaa">not set</span>'}</td>
-                <td style="padding:6px">${t.Active === false ? 'No' : 'Yes'}</td>
-                <td style="padding:6px;text-align:right;white-space:nowrap">
-                    <button class="muted-btn teacher-edit-btn" style="padding:2px 8px">Edit</button>
-                    <button class="muted-btn teacher-resetpin-btn" style="padding:2px 8px">Reset PIN</button>
-                    <button class="muted-btn teacher-delete-btn" style="padding:2px 8px;color:#c00">Delete</button>
-                </td>
-            </tr>
-        `).join('');
+        // Inline onclick attributes are the bulletproof binding here. Event
+        // delegation on the modal's table area kept failing because openModal
+        // replaces innerHTML on every call, destroying the parent element
+        // and any listener attached to it. onclick attrs survive any DOM
+        // mutation and don't depend on bubbling.
+        const rowsHtml = teachers.map(t => {
+            const idAttr = escapeJsAttr(t.TeacherId);
+            return `
+                <tr>
+                    <td style="padding:6px">${escapeHtml(t.Name || '')}</td>
+                    <td style="padding:6px">${escapeHtml((t.Classes || []).join(', '))}</td>
+                    <td style="padding:6px">${t.PinHash ? '<span title="PIN set">●●●●</span>' : '<span style="color:#aaa">not set</span>'}</td>
+                    <td style="padding:6px">${t.Active === false ? 'No' : 'Yes'}</td>
+                    <td style="padding:6px;text-align:right;white-space:nowrap">
+                        <button class="muted-btn" style="padding:2px 8px" onclick="window._teacherAction('edit', '${idAttr}')">Edit</button>
+                        <button class="muted-btn" style="padding:2px 8px" onclick="window._teacherAction('resetpin', '${idAttr}')">Reset PIN</button>
+                        <button class="muted-btn" style="padding:2px 8px;color:#c00" onclick="window._teacherAction('delete', '${idAttr}')">Delete</button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
         area.innerHTML = `
             <table style="border-collapse:collapse;font-size:13px;width:100%">
                 <thead><tr>
@@ -12467,41 +12570,40 @@
                 <tbody>${rowsHtml}</tbody>
             </table>
         `;
-        // Event delegation: one listener on the area, idempotent across
-        // re-renders. Per-button addEventListener was fragile — any DOM
-        // mutation outside renderTeachersTable (or the Stage 5 button-row
-        // restructure) silently drops the listeners. Delegation fixes it.
-        if (!area._teachersDelegated) {
-            area._teachersDelegated = true;
-            area.addEventListener('click', async (e) => {
-                const btn = e.target.closest('button');
-                if (!btn) return;
-                const tr = btn.closest('tr');
-                if (!tr || !tr.dataset.teacherId) return;
-                const id = tr.dataset.teacherId;
-                const t = SheetData.getCachedTeachers().find(x => String(x.TeacherId) === String(id));
-                if (!t) {
-                    console.error('[Manage Teachers] no cached teacher for id:', id);
-                    alert('Could not find teacher record. Try closing and reopening Manage Teachers.');
-                    return;
-                }
-                try {
-                    if (btn.classList.contains('teacher-edit-btn'))     return showTeacherEditor(t);
-                    if (btn.classList.contains('teacher-resetpin-btn')) return showTeacherPinReset(t);
-                    if (btn.classList.contains('teacher-delete-btn')) {
-                        if (!confirm(`Delete teacher "${t.Name}"?`)) return;
-                        await SheetData.deleteTeacher(id);
+        // Buttons use inline onclick -> window._teacherAction; no
+        // delegation needed.
+    }
+
+    // Global click handler for per-row Manage Teachers actions. Invoked from
+    // onclick="..." attributes baked into each row.
+    window._teacherAction = function(action, id) {
+        const t = SheetData.getCachedTeachers().find(x => String(x.TeacherId) === String(id));
+        if (!t) {
+            console.error('[Manage Teachers] no cached teacher for id:', id);
+            alert('Teacher record not found. Try closing and reopening Manage Teachers.');
+            return;
+        }
+        try {
+            if (action === 'edit')     return showTeacherEditor(t);
+            if (action === 'resetpin') return showTeacherPinReset(t);
+            if (action === 'delete') {
+                if (!confirm(`Delete teacher "${t.Name}"?`)) return;
+                return SheetData.deleteTeacher(id)
+                    .then(() => {
                         renderTeachersTable();
                         refreshTeacherDropdownIfClassLoaded();
                         showSuccess('Teacher deleted.');
-                    }
-                } catch (err) {
-                    console.error('[Manage Teachers] action failed:', err);
-                    alert('Action failed: ' + err.message);
-                }
-            });
+                    })
+                    .catch(err => {
+                        console.error('[Manage Teachers] delete failed:', err);
+                        alert('Delete failed: ' + err.message);
+                    });
+            }
+        } catch (err) {
+            console.error('[Manage Teachers] action ' + action + ' failed:', err);
+            alert('Action failed: ' + err.message);
         }
-    }
+    };
 
     // Re-render the teacher login dropdown after a teacher CRUD operation,
     // but only if a class is currently loaded (otherwise there is no
@@ -12744,11 +12846,259 @@
     window.migrateLegacyData = migrateLegacyData;
     // =================== END STAGE 5 MIGRATION ===================
 
+    // ===================== STAGE 6: TIMETABLE MANAGEMENT =====================
+    // Sheet-driven timetable. Stored in the Timetable tab; cached locally
+    // via SheetData. Same UI pattern as Manage Teachers: modal with table +
+    // Add/Edit/Delete. Per-row buttons use inline onclick to avoid the
+    // event-delegation fragility that broke Manage Teachers in Stage 5.
+
+    async function openManageTimetable() {
+        const html = `
+            <h3>Manage Timetable</h3>
+            <div class="small" style="margin-bottom:12px;line-height:1.4">
+                Timetable entries are stored in the Sheet's Timetable tab.
+                Add an entry per day/time slot per class. After save, all
+                users will see updated entries on next reload.
+            </div>
+            <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;align-items:center">
+                <button id="addTimetableBtn" class="btn-primary">+ Add Entry</button>
+                <span class="small" style="margin-left:auto">Filter by class:</span>
+                <select id="timetableClassFilter" style="min-width:200px">
+                    <option value="">-- All classes --</option>
+                </select>
+            </div>
+            <div id="timetableTableArea">Loading...</div>
+            <div style="margin-top:12px;text-align:right">
+                <button id="closeManageTimetableBtn" class="muted-btn">Close</button>
+            </div>
+        `;
+        openModal(html);
+        document.getElementById('closeManageTimetableBtn').addEventListener('click', closeModal);
+        document.getElementById('addTimetableBtn').addEventListener('click', () => showTimetableEditor(null));
+
+        // Populate class filter from Sheet classes (with CLASS_CONFIG fallback).
+        const classFilter = document.getElementById('timetableClassFilter');
+        let classesToShow = [];
+        try { classesToShow = SheetData.getCachedClasses().filter(c => c.Active !== false); } catch (e) {}
+        if (!classesToShow.length) {
+            classesToShow = Object.keys(CLASS_CONFIG).map(code => ({ ClassCode: code, DisplayName: code }));
+        }
+        classesToShow
+            .sort((a, b) => String(a.ClassCode).localeCompare(String(b.ClassCode)))
+            .forEach(c => {
+                const opt = document.createElement('option');
+                opt.value = c.ClassCode;
+                opt.textContent = c.DisplayName || c.ClassCode;
+                classFilter.appendChild(opt);
+            });
+        if (currentClass && classFilter.querySelector(`option[value="${currentClass.replace(/"/g,'\\"')}"]`)) {
+            classFilter.value = currentClass;
+        }
+        classFilter.addEventListener('change', () => renderTimetableTable());
+
+        try { await SheetData.refreshTimetable(); } catch (e) { /* fall back to cache */ }
+        renderTimetableTable();
+    }
+
+    function renderTimetableTable() {
+        const area = document.getElementById('timetableTableArea');
+        if (!area) return;
+        const filterEl = document.getElementById('timetableClassFilter');
+        const filter = (filterEl && filterEl.value) || '';
+        let entries = SheetData.getCachedTimetable();
+        if (filter) entries = entries.filter(e => String(e.Class || '').toUpperCase() === String(filter).toUpperCase());
+
+        const dayOrder = ['MON','TUE','WED','THU','FRI','SAT','SUN'];
+        entries.sort((a, b) => {
+            const da = dayOrder.indexOf(String(a.Day || '').toUpperCase());
+            const db = dayOrder.indexOf(String(b.Day || '').toUpperCase());
+            if (da !== db) return da - db;
+            return String(a.StartTime || '').localeCompare(String(b.StartTime || ''));
+        });
+
+        if (!entries.length) {
+            area.innerHTML = '<div class="small" style="color:#777">No timetable entries' +
+                (filter ? ' for ' + escapeHtml(filter) : '') +
+                ' yet. Click "+ Add Entry" to create the first one.</div>';
+            return;
+        }
+
+        const rowsHtml = entries.map(e => {
+            const idAttr = escapeJsAttr(e.TimetableId);
+            return `
+                <tr>
+                    <td style="padding:6px">${escapeHtml(e.Class || '')}</td>
+                    <td style="padding:6px">${escapeHtml(e.Day || '')}</td>
+                    <td style="padding:6px;white-space:nowrap">${escapeHtml((e.StartTime || '') + ' - ' + (e.EndTime || ''))}</td>
+                    <td style="padding:6px">${escapeHtml(e.Subject || '')}</td>
+                    <td style="padding:6px">${escapeHtml(e.TeacherId || '')}</td>
+                    <td style="padding:6px;text-align:right;white-space:nowrap">
+                        <button class="muted-btn" style="padding:2px 8px" onclick="window._timetableAction('edit', '${idAttr}')">Edit</button>
+                        <button class="muted-btn" style="padding:2px 8px;color:#c00" onclick="window._timetableAction('delete', '${idAttr}')">Delete</button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+
+        area.innerHTML = `
+            <table style="border-collapse:collapse;font-size:13px;width:100%">
+                <thead><tr>
+                    <th style="border-bottom:1px solid #ddd;text-align:left;padding:6px">Class</th>
+                    <th style="border-bottom:1px solid #ddd;text-align:left;padding:6px">Day</th>
+                    <th style="border-bottom:1px solid #ddd;text-align:left;padding:6px">Time</th>
+                    <th style="border-bottom:1px solid #ddd;text-align:left;padding:6px">Subject</th>
+                    <th style="border-bottom:1px solid #ddd;text-align:left;padding:6px">Teacher</th>
+                    <th style="border-bottom:1px solid #ddd;padding:6px"></th>
+                </tr></thead>
+                <tbody>${rowsHtml}</tbody>
+            </table>
+        `;
+    }
+
+    function showTimetableEditor(existingEntry) {
+        const isEdit = !!existingEntry;
+        const t = existingEntry || {
+            TimetableId: '', Class: currentClass || '', Day: 'MON',
+            StartTime: '08:00', EndTime: '09:00', Subject: '', TeacherId: ''
+        };
+
+        let classes = [];
+        try { classes = SheetData.getCachedClasses().filter(c => c.Active !== false); } catch (e) {}
+        if (!classes.length) classes = Object.keys(CLASS_CONFIG).map(code => ({ ClassCode: code, DisplayName: code }));
+        classes.sort((a, b) => String(a.ClassCode).localeCompare(String(b.ClassCode)));
+
+        const sheetTeacherNames = [];
+        try { SheetData.getCachedTeachers().forEach(x => { if (x.Name) sheetTeacherNames.push(x.Name); }); } catch (e) {}
+        const legacyTeacherNames = [];
+        Object.values(CLASS_CONFIG).forEach(c => (c.teachers || []).forEach(name => { if (name) legacyTeacherNames.push(name); }));
+        const allTeacherNames = Array.from(new Set([...sheetTeacherNames, ...legacyTeacherNames])).sort();
+
+        const dayOptions = [
+            ['MON', 'Monday'], ['TUE', 'Tuesday'], ['WED', 'Wednesday'],
+            ['THU', 'Thursday'], ['FRI', 'Friday']
+        ];
+
+        const html = `
+            <h3>${isEdit ? 'Edit Timetable Entry' : 'Add Timetable Entry'}</h3>
+            <div style="display:flex;flex-direction:column;gap:8px">
+                <label class="small">Class
+                    <select id="ttClassInput">
+                        ${classes.map(c => `<option value="${escapeHtml(c.ClassCode)}" ${String(c.ClassCode).toUpperCase() === String(t.Class).toUpperCase() ? 'selected' : ''}>${escapeHtml(c.DisplayName || c.ClassCode)}</option>`).join('')}
+                    </select>
+                </label>
+                <label class="small">Day
+                    <select id="ttDayInput">
+                        ${dayOptions.map(([v, l]) => `<option value="${v}" ${String(t.Day).toUpperCase() === v ? 'selected' : ''}>${l}</option>`).join('')}
+                    </select>
+                </label>
+                <div style="display:flex;gap:8px">
+                    <label class="small" style="flex:1">Start time
+                        <input id="ttStartInput" type="time" value="${escapeHtml(t.StartTime || '08:00')}">
+                    </label>
+                    <label class="small" style="flex:1">End time
+                        <input id="ttEndInput" type="time" value="${escapeHtml(t.EndTime || '09:00')}">
+                    </label>
+                </div>
+                <label class="small">Subject
+                    <input id="ttSubjectInput" value="${escapeHtml(t.Subject || '')}" placeholder="e.g. Mathematics">
+                </label>
+                <label class="small">Teacher (name; pick from list or type)
+                    <input id="ttTeacherInput" list="ttTeacherDataList" value="${escapeHtml(t.TeacherId || '')}" placeholder="Teacher name" autocomplete="off">
+                    <datalist id="ttTeacherDataList">
+                        ${allTeacherNames.map(n => `<option value="${escapeHtml(n)}"></option>`).join('')}
+                    </datalist>
+                </label>
+                <div style="display:flex;gap:8px;margin-top:8px">
+                    <button id="ttSaveBtn" class="btn-primary">${isEdit ? 'Save Changes' : 'Add Entry'}</button>
+                    <button id="ttCancelBtn" class="muted-btn">Cancel</button>
+                </div>
+                <div id="ttEditError" style="color:#c00;font-size:13px"></div>
+            </div>
+        `;
+        openModal(html);
+
+        document.getElementById('ttCancelBtn').addEventListener('click', () => openManageTimetable());
+        document.getElementById('ttSaveBtn').addEventListener('click', async () => {
+            const errEl = document.getElementById('ttEditError');
+            errEl.textContent = '';
+            const cls   = document.getElementById('ttClassInput').value;
+            const day   = document.getElementById('ttDayInput').value;
+            const start = document.getElementById('ttStartInput').value.trim();
+            const end   = document.getElementById('ttEndInput').value.trim();
+            const subj  = document.getElementById('ttSubjectInput').value.trim();
+            const teach = document.getElementById('ttTeacherInput').value.trim();
+
+            if (!cls)   { errEl.textContent = 'Class is required.'; return; }
+            if (!day)   { errEl.textContent = 'Day is required.'; return; }
+            if (!start || !end) { errEl.textContent = 'Start and end times are required.'; return; }
+            if (start >= end)   { errEl.textContent = 'End time must be after start time.'; return; }
+            if (!subj)  { errEl.textContent = 'Subject is required.'; return; }
+
+            const saveBtn = document.getElementById('ttSaveBtn');
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'Saving...';
+            try {
+                await SheetData.upsertTimetable({
+                    TimetableId: t.TimetableId || '',
+                    Class:       cls,
+                    Day:         day,
+                    StartTime:   start,
+                    EndTime:     end,
+                    Subject:     subj,
+                    TeacherId:   teach,
+                });
+                openManageTimetable();
+            } catch (err) {
+                errEl.textContent = 'Save failed: ' + err.message;
+                saveBtn.disabled = false;
+                saveBtn.textContent = isEdit ? 'Save Changes' : 'Add Entry';
+            }
+        });
+    }
+
+    // Global click handler for Manage Timetable per-row buttons.
+    window._timetableAction = function(action, id) {
+        const e = SheetData.getCachedTimetable().find(x => String(x.TimetableId) === String(id));
+        if (!e) {
+            console.error('[Manage Timetable] no cached entry for id:', id);
+            alert('Timetable entry not found. Try closing and reopening Manage Timetable.');
+            return;
+        }
+        if (action === 'edit') return showTimetableEditor(e);
+        if (action === 'delete') {
+            const desc = (e.Class || '') + ' ' + (e.Day || '') + ' ' +
+                         (e.StartTime || '') + '-' + (e.EndTime || '') + ' ' + (e.Subject || '');
+            if (!confirm('Delete this timetable entry?\n\n' + desc)) return;
+            return SheetData.deleteTimetable(id)
+                .then(() => {
+                    renderTimetableTable();
+                    showSuccess('Timetable entry deleted.');
+                })
+                .catch(err => {
+                    console.error('[Manage Timetable] delete failed:', err);
+                    alert('Delete failed: ' + err.message);
+                });
+        }
+    };
+    window.openManageTimetable = openManageTimetable;
+    // =================== END STAGE 6 TIMETABLE ===================
+
     // Used by the Stage 4 admin modals to render user-supplied strings safely.
     function escapeHtml(s) {
         return String(s == null ? '' : s).replace(/[&<>"']/g, ch => ({
             '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
         }[ch]));
+    }
+    // Escape a value for use inside an inline onclick="...handler('VALUE')..."
+    // attribute. Handles both HTML-attr context AND JS-string context.
+    function escapeJsAttr(s) {
+        return String(s == null ? '' : s)
+            .replace(/\\/g, '\\\\')
+            .replace(/'/g, "\\'")
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
     }
     // =================== END STAGE 4 ADMIN UI ===================
 
