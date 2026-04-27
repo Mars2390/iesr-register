@@ -4920,25 +4920,35 @@
         };
       }
       function studentFromSheet(s) {
+        // Tolerant of multiple Sheet header conventions. The canonical
+        // schema is AdmissionNo/FullName/Class but older deployments and
+        // pre-existing Sheets may have Admission_No/Student_Name/etc.
+        // Read whichever exists; the rest of the app uses Admission_No /
+        // Student_Name internally so we map back to those.
         return {
-          Admission_No: s.AdmissionNo,
-          Student_Name: s.FullName,
-          Class:        s.Class,
+          Admission_No: s.AdmissionNo || s.Admission_No || s.admissionNo || s['Admission No'] || s.admNo || '',
+          Student_Name: s.FullName    || s.Full_Name    || s.Student_Name || s.Name || s.StudentName || s.fullName || '',
+          Class:        s.Class       || s['class']     || s.ClassCode || '',
           Active:       s.Active !== false,
           tags:         [],
           _source:      'sheet',
         };
       }
       function teacherFromSheet(t) {
-        const classes = (typeof t.Classes === 'string')
-          ? t.Classes.split(',').map(s => s.trim()).filter(Boolean)
-          : (Array.isArray(t.Classes) ? t.Classes : []);
+        // Tolerant of multiple Sheet header conventions. Canonical is
+        // TeacherId/Name/Classes/PinHash/PinSalt; pre-existing Sheets may
+        // have Teacher_ID/Full_Name/Pin_Hash/Pin_Salt etc. Read whichever
+        // is present so the app keeps working while you re-align the Sheet.
+        const rawClasses = t.Classes || t['Classes'] || '';
+        const classes = (typeof rawClasses === 'string')
+          ? rawClasses.split(',').map(s => s.trim()).filter(Boolean)
+          : (Array.isArray(rawClasses) ? rawClasses : []);
         return {
-          TeacherId: t.TeacherId,
-          Name:      t.Name,
+          TeacherId: t.TeacherId || t.Teacher_ID || t.teacherId || t.id || '',
+          Name:      t.Name || t.Full_Name || t.FullName || t.TeacherName || t.fullName || '',
           Classes:   classes,
-          PinHash:   t.PinHash || '',
-          PinSalt:   t.PinSalt || '',
+          PinHash:   t.PinHash || t.Pin_Hash || t.pinHash || '',
+          PinSalt:   t.PinSalt || t.Pin_Salt || t.pinSalt || '',
           Active:    t.Active !== false,
           _source:   'sheet',
         };
@@ -12577,6 +12587,23 @@
     // Global click handler for per-row Manage Teachers actions. Invoked from
     // onclick="..." attributes baked into each row.
     window._teacherAction = function(action, id) {
+        // Empty id at this point almost always means the Teachers tab in
+        // the Sheet has stale headers (Teacher_ID instead of TeacherId,
+        // Full_Name instead of Name, etc.) so the cache loaded with
+        // undefined ids. Surface this loud and clear, since silent
+        // "buttons do nothing" is what the symptom looks like.
+        if (!id) {
+            console.error('[Manage Teachers] empty id for action ' + action +
+                '. The cached teacher record has no TeacherId — this usually means' +
+                ' the Teachers tab in the Sheet has old column headers (e.g.' +
+                ' "Teacher_ID" instead of "TeacherId"). Clear the Teachers tab' +
+                ' header row and re-run window.migrateLegacyData() — Code.gs' +
+                ' will recreate it with the canonical headers.');
+            alert('This teacher row has no TeacherId — the Sheet probably has stale column headers. ' +
+                'Open the Sheet, clear row 1 of the Teachers tab, then run setupSheets in Apps Script ' +
+                'and re-run window.migrateLegacyData() in this app.');
+            return;
+        }
         const t = SheetData.getCachedTeachers().find(x => String(x.TeacherId) === String(id));
         if (!t) {
             console.error('[Manage Teachers] no cached teacher for id:', id);

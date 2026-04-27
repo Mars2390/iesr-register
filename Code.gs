@@ -10,7 +10,13 @@
  *   4. Copy the resulting /exec URL into the school register app.
  *
  *   Six tabs (Config, Classes, Students, Teachers, Timetable, Attendance) are
- *   created automatically on first request — no manual sheet setup required.
+ *   created automatically on first request. If a tab already exists with a
+ *   header row that does NOT match the canonical schema below, getSheet_()
+ *   automatically REWRITES row 1 to the canonical headers so the rest of
+ *   the code can locate columns by name. This is destructive only to the
+ *   header row — data rows are left in place. If column ORDER changed
+ *   between schemas (rare), data values may end up under wrong column
+ *   names; in that case clear the entire tab and re-import.
  *
  * REQUEST FORMATS
  *   GET  ?action=<verb>&<filters>
@@ -43,13 +49,28 @@ function getSheet_(name) {
   let sh = ss_().getSheetByName(name);
   if (!sh) {
     sh = ss_().insertSheet(name);
-    sh.appendRow(headers);
+    sh.getRange(1, 1, 1, headers.length).setValues([headers]);
     sh.setFrozenRows(1);
     return sh;
   }
   if (sh.getLastRow() === 0) {
-    sh.appendRow(headers);
+    sh.getRange(1, 1, 1, headers.length).setValues([headers]);
     sh.setFrozenRows(1);
+    return sh;
+  }
+  // Sheet exists with content. Auto-realign the header row to the canonical
+  // schema. This handles the common case where a previous backend wrote
+  // alternative names like Teacher_ID / Full_Name / Admission_No / Student_Name.
+  // Only the header row is rewritten — data rows are untouched.
+  const existing = sh.getRange(1, 1, 1, headers.length).getValues()[0];
+  let matches = true;
+  for (let i = 0; i < headers.length; i++) {
+    if (String(existing[i] || '').trim() !== headers[i]) { matches = false; break; }
+  }
+  if (!matches) {
+    sh.getRange(1, 1, 1, headers.length).setValues([headers]);
+    sh.setFrozenRows(1);
+    Logger.log('[getSheet_] Realigned headers in "' + name + '" to canonical: ' + JSON.stringify(headers));
   }
   return sh;
 }
@@ -123,12 +144,12 @@ function normalizeStudent_(obj) {
 function normalizeTeacher_(obj) {
   if (!obj || typeof obj !== 'object') return {};
   return {
-    TeacherId: String(obj.TeacherId || obj.teacherId || obj.id || '').trim(),
+    TeacherId: String(obj.TeacherId || obj.Teacher_ID || obj.teacherId || obj.id || '').trim(),
     Name:      String(obj.Name || obj.FullName || obj.Full_Name || obj.TeacherName || obj.fullName || '').trim(),
     Classes:   Array.isArray(obj.Classes) ? obj.Classes.join(',')
              : String(obj.Classes || obj.classes || '').trim(),
-    PinHash:   String(obj.PinHash || obj.pinHash || '').trim(),
-    PinSalt:   String(obj.PinSalt || obj.pinSalt || '').trim(),
+    PinHash:   String(obj.PinHash || obj.Pin_Hash || obj.pinHash || '').trim(),
+    PinSalt:   String(obj.PinSalt || obj.Pin_Salt || obj.pinSalt || '').trim(),
     Active:    obj.Active === false ? false : true,
   };
 }
@@ -222,8 +243,6 @@ function upsertRow_(sheetName, keyCol, obj) {
   if (!obj || obj[keyCol] == null || String(obj[keyCol]).trim() === '') {
     return err_('missing_key: ' + keyCol, 400);
   }
-  // Capture the key once so the response echo is always correct even if
-  // `obj` is later mutated (e.g. by the UpdatedAt assignment below).
   const keyValue = String(obj[keyCol]).trim();
   obj[keyCol] = keyValue;
 
@@ -276,8 +295,6 @@ function doGet(e) {
     const p = (e && e.parameter) || {};
     let action = p.action || '';
 
-    // Legacy compat: callers without an action that pass attendance filters
-    // are routed to getAttendance.
     if (!action && (p['class'] || p.teacher || p.subject || p.startDate || p.endDate || p.date)) {
       action = 'getAttendance';
       if (p.startDate) p.from = p.startDate;
@@ -326,23 +343,18 @@ function doPost(e) {
     try { body = JSON.parse(raw); }
     catch (ex) { return err_('bad_json: ' + ex.message, 400); }
 
-    // Legacy: array body = attendance batch (e.g. from older client sync queues)
     if (Array.isArray(body)) {
       const provided = (e.parameter && e.parameter.submissionCode) || '';
       if (!checkSubmissionCode_(provided)) return err_('invalid_submission_code', 401);
       return writeAttendanceBatch_(body);
     }
 
-    // RPC envelope: { action, payload, submissionCode }
     const action = body.action || '';
     const submissionCode = body.submissionCode || '';
-    // Payload unwrap: prefer body.payload; fall back to whole body if the
-    // caller sent a flat object (lets us accept either shape).
     const p = body.payload || body;
 
     if (!checkSubmissionCode_(submissionCode)) return err_('invalid_submission_code', 401);
 
-    // ----- attendance -----
     if (action === 'submitAttendance' || action === 'syncAttendance') {
       const records = Array.isArray(p.records)
         ? p.records
@@ -350,18 +362,16 @@ function doPost(e) {
       return writeAttendanceBatch_(records);
     }
 
-    // ----- single-row CRUD -----
     if (action === 'upsertStudent')   return upsertRow_('Students',  'AdmissionNo', normalizeStudent_(p));
     if (action === 'deleteStudent')   return deleteRow_('Students',  'AdmissionNo', p.AdmissionNo || p.Admission_No);
     if (action === 'upsertTeacher')   return upsertRow_('Teachers',  'TeacherId',   normalizeTeacher_(p));
-    if (action === 'deleteTeacher')   return deleteRow_('Teachers',  'TeacherId',   p.TeacherId);
+    if (action === 'deleteTeacher')   return deleteRow_('Teachers',  'TeacherId',   p.TeacherId || p.Teacher_ID);
     if (action === 'upsertClass')     return upsertRow_('Classes',   'ClassCode',   normalizeClass_(p));
     if (action === 'deleteClass')     return deleteRow_('Classes',   'ClassCode',   p.ClassCode);
     if (action === 'upsertTimetable') return upsertRow_('Timetable', 'TimetableId', normalizeTimetable_(p));
     if (action === 'deleteTimetable') return deleteRow_('Timetable', 'TimetableId', p.TimetableId);
     if (action === 'setConfigValue')  return setConfigValue_(p.key, p.value);
 
-    // ----- bulk: each looper calls the single upsert -----
     if (action === 'bulkUpsertStudents') {
       const list = Array.isArray(p.students) ? p.students : [];
       let n = 0;
@@ -404,7 +414,20 @@ function setupSheets() {
 }
 
 function setSubmissionCodeFromEditor() {
-  // Edit the literal below before running, then Run > setSubmissionCodeFromEditor.
   setConfigValue_('submissionCode', 'CHANGE_ME');
   Logger.log('submissionCode written to Config sheet.');
+}
+
+// Call this from the editor (Run > realignAllHeaders) if you want to force
+// a one-shot rewrite of every tab's row 1 to the canonical headers without
+// hitting the web app. Useful after manually editing the sheet.
+function realignAllHeaders() {
+  Object.keys(SHEETS).forEach(function(name) {
+    const sh = ss_().getSheetByName(name);
+    if (!sh) { Logger.log('skip: ' + name + ' (does not exist)'); return; }
+    const headers = SHEETS[name];
+    sh.getRange(1, 1, 1, headers.length).setValues([headers]);
+    sh.setFrozenRows(1);
+    Logger.log('realigned: ' + name);
+  });
 }
