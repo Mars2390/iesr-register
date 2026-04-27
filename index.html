@@ -4786,13 +4786,20 @@
 
       // Read the response as text first so non-JSON responses (HTML error
       // pages, empty body, redirects) surface a useful error message instead
-      // of an opaque SyntaxError from res.json().
+      // of an opaque SyntaxError from res.json(). On failure we log the full
+      // body to console.error so callers can inspect what the upstream
+      // actually returned (Apps Script's HTML error page is ~10KB and the
+      // 200-char preview alone is rarely enough to diagnose).
       async function readJson(res, action) {
         const text = await res.text();
         try { return JSON.parse(text); }
         catch (e) {
-          const preview = text ? text.slice(0, 200) : '(empty body)';
-          throw new Error('Non-JSON response on ' + action + ': ' + preview);
+          const len = text ? text.length : 0;
+          const preview = text
+            ? (text.length > 500 ? text.slice(0, 500) + '... [truncated, total ' + len + ' bytes]' : text)
+            : '(empty body)';
+          console.error('[SheetsAPI] non-JSON response on ' + action + ' (HTTP ' + res.status + ', ' + len + ' bytes). Full body:\n' + text);
+          throw new Error('Non-JSON response on ' + action + ' (' + len + ' bytes): ' + preview);
         }
       }
 
@@ -5077,13 +5084,44 @@
         writeCache(STUDENTS_CACHE_KEY, cache);
         return result;
       }
+      // Batch a bulk upsert into chunks so each request stays inside Apps
+      // Script's HTTP response window. The whole-array request times out for
+      // ~300+ rows because each upsertRow_ on the server does an O(n) column
+      // read to find the existing key, and N×O(n) sheet ops blow past the
+      // web-app response timeout (which is shorter than the 6-min execution
+      // limit). Batches of 50 keep each request to a few seconds on the
+      // server. Partial failures across batches are captured per-batch and
+      // surfaced in the returned errors array — the caller decides whether
+      // partial success is acceptable.
+      const BULK_BATCH_SIZE = 50;
+      async function _runChunkedBulk(items, sheetsApiMethod, refreshFn, opName) {
+        if (!items.length) return { written: 0, totalAttempted: 0, batches: 0, errors: [] };
+        let totalWritten = 0;
+        const errors = [];
+        const totalBatches = Math.ceil(items.length / BULK_BATCH_SIZE);
+        for (let i = 0; i < items.length; i += BULK_BATCH_SIZE) {
+          const batch = items.slice(i, i + BULK_BATCH_SIZE);
+          const batchNum = Math.floor(i / BULK_BATCH_SIZE) + 1;
+          try {
+            const result = await sheetsApiMethod(batch);
+            const written = (result && result.written != null) ? result.written : batch.length;
+            totalWritten += written;
+            console.log('[SheetData.' + opName + '] batch ' + batchNum + '/' + totalBatches + ': wrote ' + written + '/' + batch.length);
+          } catch (err) {
+            const msg = 'Batch ' + batchNum + '/' + totalBatches + ' (rows ' + (i+1) + '-' + (i+batch.length) + '): ' + err.message;
+            errors.push(msg);
+            console.error('[SheetData.' + opName + '] ' + msg, err);
+          }
+        }
+        if (refreshFn) {
+          try { await refreshFn(); } catch (e) { console.warn('[SheetData.' + opName + '] post-batch refresh failed:', e.message); }
+        }
+        return { written: totalWritten, totalAttempted: items.length, batches: totalBatches, errors };
+      }
       async function bulkUpsertStudents(students) {
         const arr = students.map(studentToSheet)
           .filter(s => s.AdmissionNo && s.FullName && s.Class);
-        if (!arr.length) return { written: 0 };
-        const result = await SheetsAPI.bulkUpsertStudents(arr);
-        await refreshStudents();
-        return result;
+        return _runChunkedBulk(arr, SheetsAPI.bulkUpsertStudents, refreshStudents, 'bulkUpsertStudents');
       }
 
       // ----- teacher writes -----
@@ -5135,17 +5173,11 @@
       }
       async function bulkUpsertClasses(classes) {
         const arr = classes.map(classToSheet).filter(c => c.ClassCode);
-        if (!arr.length) return { written: 0 };
-        const result = await SheetsAPI.bulkUpsertClasses(arr);
-        await refreshClasses();
-        return result;
+        return _runChunkedBulk(arr, SheetsAPI.bulkUpsertClasses, refreshClasses, 'bulkUpsertClasses');
       }
       async function bulkUpsertTeachers(teachers) {
         const arr = teachers.map(teacherToSheet).filter(t => t.TeacherId && t.Name);
-        if (!arr.length) return { written: 0 };
-        const result = await SheetsAPI.bulkUpsertTeachers(arr);
-        await refreshTeachers();
-        return result;
+        return _runChunkedBulk(arr, SheetsAPI.bulkUpsertTeachers, refreshTeachers, 'bulkUpsertTeachers');
       }
 
       return {
@@ -12578,7 +12610,10 @@
                 Active:      true,
             }));
             const r = await SheetData.bulkUpsertClasses(classRecords);
-            result.classes = (r && r.written) || classRecords.length;
+            result.classes = (r && r.written) || 0;
+            if (r && r.errors && r.errors.length) {
+                r.errors.forEach(e => result.errors.push('Classes batch — ' + e));
+            }
         } catch (e) {
             result.errors.push('Classes: ' + e.message);
         }
@@ -12601,7 +12636,10 @@
         if (allStudents.length) {
             try {
                 const r = await SheetData.bulkUpsertStudents(allStudents);
-                result.students = (r && r.written) || allStudents.length;
+                result.students = (r && r.written) || 0;
+                if (r && r.errors && r.errors.length) {
+                    r.errors.forEach(e => result.errors.push('Students batch — ' + e));
+                }
             } catch (e) {
                 result.errors.push('Students: ' + e.message);
             }
@@ -12648,7 +12686,10 @@
             if (teacherRecords.length) {
                 try {
                     const r = await SheetData.bulkUpsertTeachers(teacherRecords);
-                    result.teachers = (r && r.written) || teacherRecords.length;
+                    result.teachers = (r && r.written) || 0;
+                    if (r && r.errors && r.errors.length) {
+                        r.errors.forEach(e => result.errors.push('Teachers batch — ' + e));
+                    }
                 } catch (e) {
                     result.errors.push('Teachers: ' + e.message);
                 }
