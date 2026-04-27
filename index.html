@@ -13084,6 +13084,16 @@
         return result;
     }
     window.migrateLegacyData = migrateLegacyData;
+
+    // Toolbar button "Migrate Data" routes through showAdminPinVerification,
+    // which looks up callbacks by name in verifyAdminPin's callbackMap.
+    // The map references `runMigrateData`, so this declaration must exist
+    // in the same scope or the object literal throws ReferenceError when
+    // the PIN modal confirms.
+    async function runMigrateData() {
+        return migrateLegacyData();
+    }
+    window.runMigrateData = runMigrateData;
     // =================== END STAGE 5 MIGRATION ===================
 
     // ===================== STAGE 7: MANAGE CLASSES =====================
