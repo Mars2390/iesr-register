@@ -3553,6 +3553,9 @@
           <button id="importCsvBtn" class="muted-btn"><i class="fas fa-file-csv"></i> Import CSV</button>
           <button id="manageTeachersBtn" class="muted-btn"><i class="fas fa-chalkboard-teacher"></i> Manage Teachers</button>
           <button id="manageTimetableBtn" class="muted-btn"><i class="fas fa-calendar-alt"></i> Manage Timetable</button>
+          <button id="manageClassesBtn" class="muted-btn"><i class="fas fa-school"></i> Manage Classes</button>
+          <button id="manageSubjectsBtn" class="muted-btn"><i class="fas fa-book"></i> Manage Subjects</button>
+          <button id="schoolSettingsBtn" class="muted-btn"><i class="fas fa-cog"></i> School Settings</button>
         </div>
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
           <!-- Submission code is sent automatically with each submission;
@@ -4868,6 +4871,14 @@
         upsertClass:        (cls)          => post('upsertClass',        cls),
         deleteClass:        (code)         => post('deleteClass',        { ClassCode: code }),
         bulkUpsertClasses:  (classes)      => post('bulkUpsertClasses',  { classes: classes }),
+        renameClass:        (oldCode, newCode) => post('renameClass',    { oldCode: oldCode, newCode: newCode }),
+        // Stage 7: subjects
+        getSubjects:        (cls)          => get('getSubjects',         { 'class': cls || '' }),
+        upsertSubject:      (subject)      => post('upsertSubject',      subject),
+        deleteSubject:      (code)         => post('deleteSubject',      { SubjectCode: code }),
+        bulkUpsertSubjects: (subjects)     => post('bulkUpsertSubjects', { subjects: subjects }),
+        // Stage 7: bulk Config write for school settings
+        setConfigBulk:      (values)       => post('setConfigBulk',      { values: values }),
       };
     })();
     window.SheetsAPI = SheetsAPI;
@@ -4896,6 +4907,7 @@
       const TEACHERS_CACHE_KEY  = 'iesr_sheet_teachers_cache_v1';
       const CLASSES_CACHE_KEY   = 'iesr_sheet_classes_cache_v1';
       const TIMETABLE_CACHE_KEY = 'iesr_sheet_timetable_cache_v1';
+      const SUBJECTS_CACHE_KEY  = 'iesr_sheet_subjects_cache_v1';
       const LAST_SYNC_KEY = 'iesr_sheet_data_last_sync';
       const PBKDF2_ITERATIONS = 100000;
 
@@ -5005,6 +5017,24 @@
           TeacherId:   String(t.TeacherId || '').trim(),
         };
       }
+      // Subject adapters (Stage 7)
+      function subjectFromSheet(s) {
+        return {
+          SubjectCode: String(s.SubjectCode || s.subjectCode || s.code || ''),
+          SubjectName: String(s.SubjectName || s.subjectName || s.Name || ''),
+          Class:       String(s.Class || s['class'] || ''),
+          Active:      s.Active !== false,
+          _source:     'sheet',
+        };
+      }
+      function subjectToSheet(s) {
+        return {
+          SubjectCode: String(s.SubjectCode || '').trim(),
+          SubjectName: String(s.SubjectName || '').trim(),
+          Class:       String(s.Class || '').trim(),
+          Active:      s.Active === false ? false : true,
+        };
+      }
 
       // ----- crypto helpers (mirror PinManager's PBKDF2) -----
       function bytesToHex(bytes) {
@@ -5079,6 +5109,13 @@
         if (!target) return [];
         return getCachedTimetable().filter(t => String(t.Class || '').toUpperCase() === target);
       }
+      // Subject reads (Stage 7)
+      function getCachedSubjects()                { return readCache(SUBJECTS_CACHE_KEY).map(subjectFromSheet); }
+      function getCachedSubjectsForClass(cls) {
+        const target = String(cls || '').toUpperCase();
+        if (!target) return [];
+        return getCachedSubjects().filter(s => String(s.Class || '').toUpperCase() === target);
+      }
 
       // ----- refresh (network) -----
       async function refreshStudents() {
@@ -5125,8 +5162,19 @@
           return getCachedTimetable();
         }
       }
+      async function refreshSubjects() {
+        try {
+          const rows = await SheetsAPI.getSubjects();
+          const arr = Array.isArray(rows) ? rows : [];
+          writeCache(SUBJECTS_CACHE_KEY, arr);
+          return arr.map(subjectFromSheet);
+        } catch (e) {
+          console.warn('[SheetData] refreshSubjects failed:', e.message);
+          return getCachedSubjects();
+        }
+      }
       async function refreshAll() {
-        await Promise.allSettled([refreshStudents(), refreshTeachers(), refreshClasses(), refreshTimetable()]);
+        await Promise.allSettled([refreshStudents(), refreshTeachers(), refreshClasses(), refreshTimetable(), refreshSubjects()]);
         try { localStorage.setItem(LAST_SYNC_KEY, new Date().toISOString()); } catch (e) {}
       }
 
@@ -5272,26 +5320,74 @@
         return result;
       }
 
+      // ----- subject writes (Stage 7) -----
+      async function upsertSubject(subject) {
+        const sheetForm = subjectToSheet(subject);
+        if (!sheetForm.SubjectCode) throw new Error('Subject code is required');
+        if (!sheetForm.SubjectName) throw new Error('Subject name is required');
+        if (!sheetForm.Class)       throw new Error('Class is required');
+        const result = await SheetsAPI.upsertSubject(sheetForm);
+        const cache = readCache(SUBJECTS_CACHE_KEY);
+        const idx = cache.findIndex(c => String(c.SubjectCode) === sheetForm.SubjectCode);
+        if (idx >= 0) cache[idx] = sheetForm; else cache.push(sheetForm);
+        writeCache(SUBJECTS_CACHE_KEY, cache);
+        return result;
+      }
+      async function deleteSubject(code) {
+        if (!code) throw new Error('SubjectCode is required');
+        const result = await SheetsAPI.deleteSubject(code);
+        const cache = readCache(SUBJECTS_CACHE_KEY).filter(c => String(c.SubjectCode) !== String(code));
+        writeCache(SUBJECTS_CACHE_KEY, cache);
+        return result;
+      }
+
+      // ----- rename class with cascade (Stage 7) -----
+      // Tells the server to update the Classes row AND every reference in
+      // Students, Teachers (csv), Timetable, Subjects. Returns a counts
+      // object: { class, students, teachers, timetable, subjects }.
+      async function renameClass(oldCode, newCode) {
+        oldCode = String(oldCode || '').trim();
+        newCode = String(newCode || '').trim();
+        if (!oldCode || !newCode) throw new Error('Both oldCode and newCode are required');
+        if (oldCode === newCode) return { unchanged: true };
+        const result = await SheetsAPI.renameClass(oldCode, newCode);
+        // Refresh all caches that may have been touched on the server.
+        await Promise.allSettled([refreshClasses(), refreshStudents(), refreshTeachers(), refreshTimetable(), refreshSubjects()]);
+        return result;
+      }
+
+      // ----- bulk Config write for school settings (Stage 7) -----
+      async function setSchoolSettings(values) {
+        if (!values || typeof values !== 'object') throw new Error('values object required');
+        return SheetsAPI.setConfigBulk(values);
+      }
+
       return {
         // adapters (exposed for tests/debug)
         studentFromSheet,   studentToSheet,
         teacherFromSheet,   teacherToSheet,
         classFromSheet,     classToSheet,
         timetableFromSheet, timetableToSheet,
+        subjectFromSheet,   subjectToSheet,
         // reads
         getCachedStudents, getCachedStudentsForClass,
         getCachedTeachers, getCachedTeachersForClass, getRawCachedTeachers,
         getCachedClasses,  getCachedClassByCode,
         getCachedTimetable, getCachedTimetableForClass,
-        refreshStudents, refreshTeachers, refreshClasses, refreshTimetable, refreshAll,
+        getCachedSubjects, getCachedSubjectsForClass,
+        refreshStudents, refreshTeachers, refreshClasses, refreshTimetable, refreshSubjects, refreshAll,
         // student writes
         upsertStudent, deleteStudent, bulkUpsertStudents,
         // teacher writes
         upsertTeacher, deleteTeacher, bulkUpsertTeachers,
-        // class writes (Stage 5)
-        upsertClass, deleteClass, bulkUpsertClasses,
+        // class writes (Stage 5 + Stage 7 rename)
+        upsertClass, deleteClass, bulkUpsertClasses, renameClass,
         // timetable writes (Stage 6)
         upsertTimetable, deleteTimetable,
+        // subject writes (Stage 7)
+        upsertSubject, deleteSubject,
+        // school settings (Stage 7)
+        setSchoolSettings,
         // crypto
         hashTeacherPin, verifyTeacherPin,
       };
@@ -6612,6 +6708,9 @@
                 'importStudentsCsv': importStudentsCsv,
                 'openManageTeachers': openManageTeachers,
                 'openManageTimetable': openManageTimetable,
+                'openManageClasses': openManageClasses,
+                'openManageSubjects': openManageSubjects,
+                'openSchoolSettings': openSchoolSettings,
             };
             const fn = callbackMap[callbackName] || window[callbackName];
             if (typeof fn === 'function') fn();
@@ -6858,6 +6957,15 @@
     });
     document.getElementById('manageTimetableBtn').addEventListener('click', function() {
         showAdminPinVerification('openManageTimetable', 'manage timetable');
+    });
+    document.getElementById('manageClassesBtn').addEventListener('click', function() {
+        showAdminPinVerification('openManageClasses', 'manage classes');
+    });
+    document.getElementById('manageSubjectsBtn').addEventListener('click', function() {
+        showAdminPinVerification('openManageSubjects', 'manage subjects');
+    });
+    document.getElementById('schoolSettingsBtn').addEventListener('click', function() {
+        showAdminPinVerification('openSchoolSettings', 'edit school settings');
     });
 
     document.getElementById('clearWeek').addEventListener('click', function() {
@@ -12873,6 +12981,443 @@
     window.migrateLegacyData = migrateLegacyData;
     // =================== END STAGE 5 MIGRATION ===================
 
+    // ===================== STAGE 7: MANAGE CLASSES =====================
+    // Sheet-driven class CRUD. Add/edit/delete from the admin panel.
+    // Renaming a ClassCode triggers a server-side cascade through Students,
+    // Teachers (CSV), Timetable, and Subjects (Attendance is intentionally
+    // left alone — historical records keep their original class code).
+
+    async function openManageClasses() {
+        const html = `
+            <h3>Manage Classes</h3>
+            <div class="small" style="margin-bottom:12px;line-height:1.4">
+                Classes are stored in the Sheet's Classes tab and drive the
+                login dropdown, the per-class teacher/student/subject filters,
+                and the timetable. Renaming a class cascades the new code to
+                Students, Teachers, Timetable, and Subjects.
+            </div>
+            <button id="addClassBtn" class="btn-primary" style="margin-bottom:8px">+ Add Class</button>
+            <div id="classesTableArea">Loading...</div>
+            <div style="margin-top:12px;text-align:right">
+                <button id="closeManageClassesBtn" class="muted-btn">Close</button>
+            </div>
+        `;
+        openModal(html);
+        document.getElementById('closeManageClassesBtn').addEventListener('click', closeModal);
+        document.getElementById('addClassBtn').addEventListener('click', () => showClassEditor(null));
+        try { await SheetData.refreshClasses(); } catch (e) {}
+        renderClassesTable();
+    }
+
+    function renderClassesTable() {
+        const area = document.getElementById('classesTableArea');
+        if (!area) return;
+        const classes = SheetData.getCachedClasses();
+        if (!classes.length) {
+            area.innerHTML = '<div class="small" style="color:#777">No classes yet. Click "+ Add Class" to create the first one.</div>';
+            return;
+        }
+        classes.sort((a, b) => String(a.ClassCode).localeCompare(String(b.ClassCode)));
+        const rowsHtml = classes.map(c => {
+            const codeAttr = escapeJsAttr(c.ClassCode);
+            return `
+                <tr>
+                    <td style="padding:6px"><code>${escapeHtml(c.ClassCode || '')}</code></td>
+                    <td style="padding:6px">${escapeHtml(c.DisplayName || '')}</td>
+                    <td style="padding:6px">${escapeHtml(c.Category || '')}</td>
+                    <td style="padding:6px">${c.Active === false ? 'No' : 'Yes'}</td>
+                    <td style="padding:6px;text-align:right;white-space:nowrap">
+                        <button class="muted-btn" style="padding:2px 8px" onclick="window._classAction('edit', '${codeAttr}')">Edit</button>
+                        <button class="muted-btn" style="padding:2px 8px" onclick="window._classAction('rename', '${codeAttr}')">Rename code</button>
+                        <button class="muted-btn" style="padding:2px 8px;color:#c00" onclick="window._classAction('delete', '${codeAttr}')">Delete</button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+        area.innerHTML = `
+            <table style="border-collapse:collapse;font-size:13px;width:100%">
+                <thead><tr>
+                    <th style="border-bottom:1px solid #ddd;text-align:left;padding:6px">ClassCode</th>
+                    <th style="border-bottom:1px solid #ddd;text-align:left;padding:6px">Display Name</th>
+                    <th style="border-bottom:1px solid #ddd;text-align:left;padding:6px">Category</th>
+                    <th style="border-bottom:1px solid #ddd;text-align:left;padding:6px">Active</th>
+                    <th style="border-bottom:1px solid #ddd;padding:6px"></th>
+                </tr></thead>
+                <tbody>${rowsHtml}</tbody>
+            </table>
+        `;
+    }
+
+    function showClassEditor(existing) {
+        const isEdit = !!existing;
+        const c = existing || { ClassCode: '', DisplayName: '', Category: 'Other', Active: true };
+        const html = `
+            <h3>${isEdit ? 'Edit Class' : 'Add Class'}</h3>
+            <div style="display:flex;flex-direction:column;gap:8px">
+                <label class="small">ClassCode (unique)
+                    <input id="clsCodeInput" value="${escapeHtml(c.ClassCode || '')}" placeholder="e.g. CEEMAY2025R" ${isEdit ? 'disabled' : ''}>
+                </label>
+                ${isEdit ? '<div class="small" style="color:#777">To change the code itself, use the "Rename code" button on the list (it cascades references).</div>' : ''}
+                <label class="small">Display name
+                    <input id="clsNameInput" value="${escapeHtml(c.DisplayName || '')}" placeholder="e.g. Craft Electrical 2025R">
+                </label>
+                <label class="small">Category
+                    <input id="clsCatInput" value="${escapeHtml(c.Category || '')}" placeholder="e.g. Craft Certificate / Diploma" list="clsCatList">
+                    <datalist id="clsCatList">
+                        <option value="Craft Certificate"></option>
+                        <option value="Diploma"></option>
+                        <option value="Certificate"></option>
+                        <option value="Other"></option>
+                    </datalist>
+                </label>
+                <label class="small"><input type="checkbox" id="clsActiveInput" ${c.Active === false ? '' : 'checked'}> Active</label>
+                <div style="display:flex;gap:8px;margin-top:8px">
+                    <button id="clsSaveBtn" class="btn-primary">${isEdit ? 'Save Changes' : 'Add Class'}</button>
+                    <button id="clsCancelBtn" class="muted-btn">Cancel</button>
+                </div>
+                <div id="clsEditError" style="color:#c00;font-size:13px"></div>
+            </div>
+        `;
+        openModal(html);
+        document.getElementById('clsCancelBtn').addEventListener('click', () => openManageClasses());
+        document.getElementById('clsSaveBtn').addEventListener('click', async () => {
+            const errEl = document.getElementById('clsEditError');
+            errEl.textContent = '';
+            const code = isEdit ? c.ClassCode : document.getElementById('clsCodeInput').value.trim();
+            const name = document.getElementById('clsNameInput').value.trim();
+            const cat  = document.getElementById('clsCatInput').value.trim() || 'Other';
+            const active = document.getElementById('clsActiveInput').checked;
+            if (!code) { errEl.textContent = 'ClassCode is required.'; return; }
+            if (!name) { errEl.textContent = 'Display name is required.'; return; }
+            const saveBtn = document.getElementById('clsSaveBtn');
+            saveBtn.disabled = true; saveBtn.textContent = 'Saving...';
+            try {
+                await SheetData.upsertClass({
+                    ClassCode: code, DisplayName: name, Category: cat, Active: active
+                });
+                showSuccess('Class saved.');
+                openManageClasses();
+                if (typeof populateClassDropdown === 'function') populateClassDropdown();
+            } catch (err) {
+                errEl.textContent = 'Save failed: ' + err.message;
+                saveBtn.disabled = false; saveBtn.textContent = isEdit ? 'Save Changes' : 'Add Class';
+            }
+        });
+    }
+
+    async function showClassRename(oldCode) {
+        const newCode = prompt('Enter the NEW ClassCode for "' + oldCode + '".\n\n' +
+            'This will cascade-update Students.Class, Teachers.Classes (CSV), Timetable.Class, and Subjects.Class. ' +
+            'Attendance history is left under the original code.');
+        if (!newCode) return;
+        const trimmed = String(newCode).trim();
+        if (trimmed === oldCode) return;
+        if (!confirm('Rename "' + oldCode + '" to "' + trimmed + '"?')) return;
+        try {
+            const counts = await SheetData.renameClass(oldCode, trimmed);
+            const summary = 'Renamed.\n\n' +
+                '• Class: ' + (counts.class || 0) + '\n' +
+                '• Students: ' + (counts.students || 0) + '\n' +
+                '• Teachers: ' + (counts.teachers || 0) + '\n' +
+                '• Timetable: ' + (counts.timetable || 0) + '\n' +
+                '• Subjects: ' + (counts.subjects || 0);
+            alert(summary);
+            openManageClasses();
+            if (typeof populateClassDropdown === 'function') populateClassDropdown();
+        } catch (err) {
+            alert('Rename failed: ' + err.message);
+        }
+    }
+
+    window._classAction = function(action, code) {
+        if (!code) { console.error('[Manage Classes] empty code for action ' + action); return; }
+        const c = SheetData.getCachedClasses().find(x => String(x.ClassCode) === String(code));
+        if (!c) { alert('Class record not found.'); return; }
+        if (action === 'edit') return showClassEditor(c);
+        if (action === 'rename') return showClassRename(code);
+        if (action === 'delete') {
+            if (!confirm('Delete class "' + code + '"?\n\nThis only removes the row from the Classes tab. Students/Teachers/Timetable/Subjects/Attendance referencing this code remain (they will appear orphaned). Use "Rename code" instead if you want to retire a code while keeping its data.')) return;
+            return SheetData.deleteClass(code).then(() => {
+                renderClassesTable();
+                if (typeof populateClassDropdown === 'function') populateClassDropdown();
+                showSuccess('Class deleted.');
+            }).catch(err => {
+                console.error('[Manage Classes] delete failed:', err);
+                alert('Delete failed: ' + err.message);
+            });
+        }
+    };
+    window.openManageClasses = openManageClasses;
+    // =================== END STAGE 7 MANAGE CLASSES ===================
+
+    // ===================== STAGE 7: MANAGE SUBJECTS =====================
+    // Sheet-driven subject CRUD per class. The timetable editor's Subject
+    // input is wired to a datalist of these so users can pick canonical
+    // subjects rather than free-typing them.
+
+    async function openManageSubjects() {
+        const html = `
+            <h3>Manage Subjects</h3>
+            <div class="small" style="margin-bottom:12px;line-height:1.4">
+                Subjects are stored in the Sheet's Subjects tab. Defining
+                them per class drives the timetable editor's Subject
+                autocomplete and keeps subject names consistent across
+                attendance reports.
+            </div>
+            <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;align-items:center">
+                <button id="addSubjectBtn" class="btn-primary">+ Add Subject</button>
+                <span class="small" style="margin-left:auto">Filter by class:</span>
+                <select id="subjectClassFilter" style="min-width:200px">
+                    <option value="">-- All classes --</option>
+                </select>
+            </div>
+            <div id="subjectsTableArea">Loading...</div>
+            <div style="margin-top:12px;text-align:right">
+                <button id="closeManageSubjectsBtn" class="muted-btn">Close</button>
+            </div>
+        `;
+        openModal(html);
+        document.getElementById('closeManageSubjectsBtn').addEventListener('click', closeModal);
+        document.getElementById('addSubjectBtn').addEventListener('click', () => showSubjectEditor(null));
+
+        const filter = document.getElementById('subjectClassFilter');
+        let cls = [];
+        try { cls = SheetData.getCachedClasses().filter(c => c.Active !== false); } catch (e) {}
+        if (!cls.length) cls = Object.keys(CLASS_CONFIG).map(code => ({ ClassCode: code, DisplayName: code }));
+        cls.sort((a, b) => String(a.ClassCode).localeCompare(String(b.ClassCode)))
+           .forEach(c => {
+               const opt = document.createElement('option');
+               opt.value = c.ClassCode;
+               opt.textContent = c.DisplayName || c.ClassCode;
+               filter.appendChild(opt);
+           });
+        if (currentClass && filter.querySelector(`option[value="${currentClass.replace(/"/g,'\\"')}"]`)) filter.value = currentClass;
+        filter.addEventListener('change', () => renderSubjectsTable());
+
+        try { await SheetData.refreshSubjects(); } catch (e) {}
+        renderSubjectsTable();
+    }
+
+    function renderSubjectsTable() {
+        const area = document.getElementById('subjectsTableArea');
+        if (!area) return;
+        const filterEl = document.getElementById('subjectClassFilter');
+        const filter = (filterEl && filterEl.value) || '';
+        let subjects = SheetData.getCachedSubjects();
+        if (filter) subjects = subjects.filter(s => String(s.Class || '').toUpperCase() === String(filter).toUpperCase());
+        subjects.sort((a, b) => {
+            const c = String(a.Class || '').localeCompare(String(b.Class || ''));
+            return c !== 0 ? c : String(a.SubjectCode || '').localeCompare(String(b.SubjectCode || ''));
+        });
+        if (!subjects.length) {
+            area.innerHTML = '<div class="small" style="color:#777">No subjects' + (filter ? ' for ' + escapeHtml(filter) : '') + ' yet. Click "+ Add Subject".</div>';
+            return;
+        }
+        const rowsHtml = subjects.map(s => {
+            const codeAttr = escapeJsAttr(s.SubjectCode);
+            return `
+                <tr>
+                    <td style="padding:6px"><code>${escapeHtml(s.SubjectCode || '')}</code></td>
+                    <td style="padding:6px">${escapeHtml(s.SubjectName || '')}</td>
+                    <td style="padding:6px">${escapeHtml(s.Class || '')}</td>
+                    <td style="padding:6px">${s.Active === false ? 'No' : 'Yes'}</td>
+                    <td style="padding:6px;text-align:right;white-space:nowrap">
+                        <button class="muted-btn" style="padding:2px 8px" onclick="window._subjectAction('edit', '${codeAttr}')">Edit</button>
+                        <button class="muted-btn" style="padding:2px 8px;color:#c00" onclick="window._subjectAction('delete', '${codeAttr}')">Delete</button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+        area.innerHTML = `
+            <table style="border-collapse:collapse;font-size:13px;width:100%">
+                <thead><tr>
+                    <th style="border-bottom:1px solid #ddd;text-align:left;padding:6px">Code</th>
+                    <th style="border-bottom:1px solid #ddd;text-align:left;padding:6px">Name</th>
+                    <th style="border-bottom:1px solid #ddd;text-align:left;padding:6px">Class</th>
+                    <th style="border-bottom:1px solid #ddd;text-align:left;padding:6px">Active</th>
+                    <th style="border-bottom:1px solid #ddd;padding:6px"></th>
+                </tr></thead>
+                <tbody>${rowsHtml}</tbody>
+            </table>
+        `;
+    }
+
+    function showSubjectEditor(existing) {
+        const isEdit = !!existing;
+        const s = existing || { SubjectCode: '', SubjectName: '', Class: currentClass || '', Active: true };
+        let cls = [];
+        try { cls = SheetData.getCachedClasses().filter(c => c.Active !== false); } catch (e) {}
+        if (!cls.length) cls = Object.keys(CLASS_CONFIG).map(code => ({ ClassCode: code, DisplayName: code }));
+        cls.sort((a, b) => String(a.ClassCode).localeCompare(String(b.ClassCode)));
+        const html = `
+            <h3>${isEdit ? 'Edit Subject' : 'Add Subject'}</h3>
+            <div style="display:flex;flex-direction:column;gap:8px">
+                <label class="small">SubjectCode (unique)
+                    <input id="subjCodeInput" value="${escapeHtml(s.SubjectCode || '')}" placeholder="e.g. MATH101" ${isEdit ? 'disabled' : ''}>
+                </label>
+                <label class="small">Subject name
+                    <input id="subjNameInput" value="${escapeHtml(s.SubjectName || '')}" placeholder="e.g. Mathematics">
+                </label>
+                <label class="small">Class
+                    <select id="subjClassInput">
+                        ${cls.map(c => `<option value="${escapeHtml(c.ClassCode)}" ${String(c.ClassCode).toUpperCase() === String(s.Class).toUpperCase() ? 'selected' : ''}>${escapeHtml(c.DisplayName || c.ClassCode)}</option>`).join('')}
+                    </select>
+                </label>
+                <label class="small"><input type="checkbox" id="subjActiveInput" ${s.Active === false ? '' : 'checked'}> Active</label>
+                <div style="display:flex;gap:8px;margin-top:8px">
+                    <button id="subjSaveBtn" class="btn-primary">${isEdit ? 'Save Changes' : 'Add Subject'}</button>
+                    <button id="subjCancelBtn" class="muted-btn">Cancel</button>
+                </div>
+                <div id="subjEditError" style="color:#c00;font-size:13px"></div>
+            </div>
+        `;
+        openModal(html);
+        document.getElementById('subjCancelBtn').addEventListener('click', () => openManageSubjects());
+        document.getElementById('subjSaveBtn').addEventListener('click', async () => {
+            const errEl = document.getElementById('subjEditError');
+            errEl.textContent = '';
+            const code = isEdit ? s.SubjectCode : document.getElementById('subjCodeInput').value.trim();
+            const name = document.getElementById('subjNameInput').value.trim();
+            const klass = document.getElementById('subjClassInput').value;
+            const active = document.getElementById('subjActiveInput').checked;
+            if (!code)  { errEl.textContent = 'SubjectCode is required.'; return; }
+            if (!name)  { errEl.textContent = 'Subject name is required.'; return; }
+            if (!klass) { errEl.textContent = 'Class is required.'; return; }
+            const saveBtn = document.getElementById('subjSaveBtn');
+            saveBtn.disabled = true; saveBtn.textContent = 'Saving...';
+            try {
+                await SheetData.upsertSubject({
+                    SubjectCode: code, SubjectName: name, Class: klass, Active: active
+                });
+                showSuccess('Subject saved.');
+                openManageSubjects();
+            } catch (err) {
+                errEl.textContent = 'Save failed: ' + err.message;
+                saveBtn.disabled = false; saveBtn.textContent = isEdit ? 'Save Changes' : 'Add Subject';
+            }
+        });
+    }
+
+    window._subjectAction = function(action, code) {
+        if (!code) { console.error('[Manage Subjects] empty code for action ' + action); return; }
+        const s = SheetData.getCachedSubjects().find(x => String(x.SubjectCode) === String(code));
+        if (!s) { alert('Subject record not found.'); return; }
+        if (action === 'edit') return showSubjectEditor(s);
+        if (action === 'delete') {
+            if (!confirm('Delete subject "' + code + '"?')) return;
+            return SheetData.deleteSubject(code).then(() => {
+                renderSubjectsTable();
+                showSuccess('Subject deleted.');
+            }).catch(err => {
+                console.error('[Manage Subjects] delete failed:', err);
+                alert('Delete failed: ' + err.message);
+            });
+        }
+    };
+    window.openManageSubjects = openManageSubjects;
+    // =================== END STAGE 7 MANAGE SUBJECTS ===================
+
+    // ===================== STAGE 7: SCHOOL SETTINGS =====================
+    // Edits the Sheet's Config tab via setConfigBulk. The same keys are
+    // mirrored to localStorage so Stage 1's CONFIG / applyBranding picks
+    // them up on reload. Multi-user reads of the canonical settings come
+    // from the Sheet via SheetsAPI.getConfig().
+
+    async function openSchoolSettings() {
+        const html = `
+            <h3>School Settings</h3>
+            <div class="small" style="margin-bottom:12px;line-height:1.4">
+                These values are stored in the Sheet's Config tab and affect
+                the school name, branding line, and current academic period
+                shown across the app. Changes apply on next reload.
+            </div>
+            <div id="schoolSettingsArea">Loading current values...</div>
+            <div style="margin-top:12px;text-align:right">
+                <button id="closeSchoolSettingsBtn" class="muted-btn">Close</button>
+            </div>
+        `;
+        openModal(html);
+        document.getElementById('closeSchoolSettingsBtn').addEventListener('click', closeModal);
+
+        // Pull canonical Config from Sheet (with localStorage fallback if offline).
+        let cfg = {};
+        try { cfg = (await SheetsAPI.getConfig()) || {}; }
+        catch (e) {
+            console.warn('[School Settings] getConfig failed, using local CONFIG:', e.message);
+            cfg = {};
+        }
+        const v = (k) => String(cfg[k] != null ? cfg[k] : (CONFIG[k] != null ? CONFIG[k] : ''));
+
+        document.getElementById('schoolSettingsArea').innerHTML = `
+            <div style="display:flex;flex-direction:column;gap:8px">
+                <label class="small">School name (short)
+                    <input id="setSchoolName" value="${escapeHtml(v('schoolName'))}" placeholder="e.g. IESR">
+                </label>
+                <label class="small">School full name
+                    <input id="setSchoolFullName" value="${escapeHtml(v('schoolFullName'))}" placeholder="e.g. Intelligent Electronic School Register">
+                </label>
+                <label class="small">Department name
+                    <input id="setDepartmentName" value="${escapeHtml(v('departmentName'))}" placeholder="e.g. ELECTRICAL DEPARTMENT">
+                </label>
+                <label class="small">Academic year
+                    <input id="setYear" value="${escapeHtml(v('year') || v('academicYear'))}" placeholder="e.g. 2026">
+                </label>
+                <label class="small">Term
+                    <input id="setTerm" value="${escapeHtml(v('term'))}" placeholder="e.g. Term 1 / January">
+                </label>
+                <label class="small">Submission code (sent with attendance writes)
+                    <input id="setSubmissionCode" type="password" value="${escapeHtml(v('submissionCode'))}" placeholder="leave blank to keep existing">
+                </label>
+                <div style="display:flex;gap:8px;margin-top:8px">
+                    <button id="schoolSaveBtn" class="btn-primary">Save</button>
+                </div>
+                <div id="schoolSettingsError" style="color:#c00;font-size:13px"></div>
+            </div>
+        `;
+
+        document.getElementById('schoolSaveBtn').addEventListener('click', async () => {
+            const errEl = document.getElementById('schoolSettingsError');
+            errEl.textContent = '';
+            const values = {
+                schoolName:     document.getElementById('setSchoolName').value.trim(),
+                schoolFullName: document.getElementById('setSchoolFullName').value.trim(),
+                departmentName: document.getElementById('setDepartmentName').value.trim(),
+                year:           document.getElementById('setYear').value.trim(),
+                term:           document.getElementById('setTerm').value.trim(),
+            };
+            // Only update submissionCode if non-empty (avoid wiping it accidentally).
+            const subCode = document.getElementById('setSubmissionCode').value.trim();
+            if (subCode) values.submissionCode = subCode;
+
+            const btn = document.getElementById('schoolSaveBtn');
+            btn.disabled = true; btn.textContent = 'Saving...';
+            try {
+                await SheetData.setSchoolSettings(values);
+                // Also update the local PinManager submission code if it changed,
+                // so subsequent writes in this session keep working.
+                if (subCode && typeof PinManager !== 'undefined' && PinManager.setSubmissionCode) {
+                    try { await PinManager.setSubmissionCode(subCode); } catch (e) {}
+                }
+                // Mirror branding values to localStorage so Stage 1 applyBranding
+                // picks them up on next reload without requiring a Sheet round-trip.
+                try {
+                    const local = JSON.parse(localStorage.getItem('iesr_tenant_config_v1') || '{}');
+                    Object.keys(values).forEach(k => {
+                        if (k !== 'submissionCode') local[k] = values[k];
+                    });
+                    localStorage.setItem('iesr_tenant_config_v1', JSON.stringify(local));
+                } catch (e) {}
+                showSuccess('School settings saved. Reload the page for branding changes to apply.');
+                closeModal();
+            } catch (err) {
+                errEl.textContent = 'Save failed: ' + err.message;
+                btn.disabled = false; btn.textContent = 'Save';
+            }
+        });
+    }
+    window.openSchoolSettings = openSchoolSettings;
+    // =================== END STAGE 7 SCHOOL SETTINGS ===================
+
     // ===================== STAGE 6: TIMETABLE MANAGEMENT =====================
     // Sheet-driven timetable. Stored in the Timetable tab; cached locally
     // via SheetData. Same UI pattern as Manage Teachers: modal with table +
@@ -13026,8 +13571,25 @@
                         <input id="ttEndInput" type="time" value="${escapeHtml(t.EndTime || '09:00')}">
                     </label>
                 </div>
-                <label class="small">Subject
-                    <input id="ttSubjectInput" value="${escapeHtml(t.Subject || '')}" placeholder="e.g. Mathematics">
+                <label class="small">Subject (from Subjects tab — pick or type custom)
+                    <input id="ttSubjectInput" list="ttSubjectDataList" value="${escapeHtml(t.Subject || '')}" placeholder="e.g. Mathematics" autocomplete="off">
+                    <datalist id="ttSubjectDataList">
+                        ${(() => {
+                            const initialClass = String(t.Class || currentClass || '').toUpperCase();
+                            let subs = [];
+                            try { subs = SheetData.getCachedSubjects(); } catch (e) {}
+                            const filtered = subs.filter(s => !initialClass || String(s.Class || '').toUpperCase() === initialClass);
+                            // Prefer subjects scoped to this class; fall back to ALL if class has none.
+                            const list = filtered.length ? filtered : subs;
+                            const seen = new Set();
+                            return list.map(s => {
+                                const name = s.SubjectName || s.SubjectCode;
+                                if (!name || seen.has(name)) return '';
+                                seen.add(name);
+                                return `<option value="${escapeHtml(name)}"></option>`;
+                            }).join('');
+                        })()}
+                    </datalist>
                 </label>
                 <label class="small">Teacher (name; pick from list or type)
                     <input id="ttTeacherInput" list="ttTeacherDataList" value="${escapeHtml(t.TeacherId || '')}" placeholder="Teacher name" autocomplete="off">

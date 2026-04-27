@@ -9,14 +9,11 @@
  *        Who has access: Anyone   (required so the browser app can call it)
  *   4. Copy the resulting /exec URL into the school register app.
  *
- *   Six tabs (Config, Classes, Students, Teachers, Timetable, Attendance) are
- *   created automatically on first request. If a tab already exists with a
- *   header row that does NOT match the canonical schema below, getSheet_()
- *   automatically REWRITES row 1 to the canonical headers so the rest of
- *   the code can locate columns by name. This is destructive only to the
- *   header row — data rows are left in place. If column ORDER changed
- *   between schemas (rare), data values may end up under wrong column
- *   names; in that case clear the entire tab and re-import.
+ *   Seven tabs (Config, Classes, Students, Teachers, Subjects, Timetable,
+ *   Attendance) are auto-created on first request. If a tab already exists
+ *   with a header row that does NOT match the canonical schema, getSheet_()
+ *   automatically REWRITES row 1 to canonical headers so the rest of the
+ *   code can locate columns by name. Data rows are untouched.
  *
  * REQUEST FORMATS
  *   GET  ?action=<verb>&<filters>
@@ -25,9 +22,7 @@
  *
  * AUTH
  *   Reads (GET):  no auth — the URL is the secret.
- *   Writes (POST): require submissionCode == Config.submissionCode. If the
- *                  Config sheet has no submissionCode set, writes are
- *                  permitted (bootstrap mode for new tenants — set one ASAP).
+ *   Writes (POST): require submissionCode == Config.submissionCode (or unset).
  */
 
 const SHEETS = {
@@ -35,6 +30,7 @@ const SHEETS = {
   Classes:    ['ClassCode','DisplayName','Category','Active','UpdatedAt'],
   Students:   ['AdmissionNo','FullName','Class','Active','UpdatedAt'],
   Teachers:   ['TeacherId','Name','Classes','PinHash','PinSalt','Active','UpdatedAt'],
+  Subjects:   ['SubjectCode','SubjectName','Class','Active','UpdatedAt'],
   Timetable:  ['TimetableId','Class','Day','StartTime','EndTime','Subject','TeacherId','UpdatedAt'],
   Attendance: ['SubmissionId','Class','WeekStart','Teacher','StudentAdmNo','Date','SessionId','Subject','Status','TagsJSON','Notes','SubmittedAt'],
 };
@@ -58,10 +54,6 @@ function getSheet_(name) {
     sh.setFrozenRows(1);
     return sh;
   }
-  // Sheet exists with content. Auto-realign the header row to the canonical
-  // schema. This handles the common case where a previous backend wrote
-  // alternative names like Teacher_ID / Full_Name / Admission_No / Student_Name.
-  // Only the header row is rewritten — data rows are untouched.
   const existing = sh.getRange(1, 1, 1, headers.length).getValues()[0];
   let matches = true;
   for (let i = 0; i < headers.length; i++) {
@@ -75,9 +67,7 @@ function getSheet_(name) {
   return sh;
 }
 
-function ensureAllSheets_() {
-  Object.keys(SHEETS).forEach(getSheet_);
-}
+function ensureAllSheets_() { Object.keys(SHEETS).forEach(getSheet_); }
 
 function readAll_(name) {
   const sh = getSheet_(name);
@@ -113,9 +103,7 @@ function readConfig_() {
 // ===== response helpers =====
 
 function jsonResponse_(data) {
-  return ContentService
-    .createTextOutput(JSON.stringify(data))
-    .setMimeType(ContentService.MimeType.JSON);
+  return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON);
 }
 function ok_(data, extra)    { return jsonResponse_(Object.assign({ ok: true,  data: data == null ? null : data }, extra || {})); }
 function err_(message, code) { return jsonResponse_({ ok: false, error: String(message || 'error'), code: code || 400 }); }
@@ -129,7 +117,7 @@ function checkSubmissionCode_(provided) {
   return String(provided || '') === expected;
 }
 
-// ===== payload normalizers (accept multiple name formats) =====
+// ===== payload normalizers =====
 
 function normalizeStudent_(obj) {
   if (!obj || typeof obj !== 'object') return {};
@@ -146,8 +134,7 @@ function normalizeTeacher_(obj) {
   return {
     TeacherId: String(obj.TeacherId || obj.Teacher_ID || obj.teacherId || obj.id || '').trim(),
     Name:      String(obj.Name || obj.FullName || obj.Full_Name || obj.TeacherName || obj.fullName || '').trim(),
-    Classes:   Array.isArray(obj.Classes) ? obj.Classes.join(',')
-             : String(obj.Classes || obj.classes || '').trim(),
+    Classes:   Array.isArray(obj.Classes) ? obj.Classes.join(',') : String(obj.Classes || obj.classes || '').trim(),
     PinHash:   String(obj.PinHash || obj.Pin_Hash || obj.pinHash || '').trim(),
     PinSalt:   String(obj.PinSalt || obj.Pin_Salt || obj.pinSalt || '').trim(),
     Active:    obj.Active === false ? false : true,
@@ -160,6 +147,16 @@ function normalizeClass_(obj) {
     ClassCode:   String(obj.ClassCode || obj.classCode || obj.Class || obj.code || '').trim(),
     DisplayName: String(obj.DisplayName || obj.displayName || obj.Name || obj.name || obj.ClassCode || '').trim(),
     Category:    String(obj.Category || obj.category || 'Other').trim(),
+    Active:      obj.Active === false ? false : true,
+  };
+}
+
+function normalizeSubject_(obj) {
+  if (!obj || typeof obj !== 'object') return {};
+  return {
+    SubjectCode: String(obj.SubjectCode || obj.subjectCode || obj.code || '').trim(),
+    SubjectName: String(obj.SubjectName || obj.subjectName || obj.Name || obj.name || '').trim(),
+    Class:       String(obj.Class || obj['class'] || obj.ClassCode || '').trim(),
     Active:      obj.Active === false ? false : true,
   };
 }
@@ -183,31 +180,19 @@ function writeAttendanceBatch_(records) {
   const sh = getSheet_('Attendance');
   const nowIso = new Date().toISOString();
   const rows = (records || []).map(function(r) {
-    const tagsJson = r.tags
-      ? (typeof r.tags === 'string' ? r.tags : JSON.stringify(r.tags))
-      : '';
+    const tagsJson = r.tags ? (typeof r.tags === 'string' ? r.tags : JSON.stringify(r.tags)) : '';
     return [
       r.submissionId || Utilities.getUuid(),
-      r['class'] || '',
-      r.weekStart || '',
-      r.teacher || '',
-      r.studentAdmNo || r.studentId || '',
-      r.date || '',
-      r.sessionId || '',
-      r.subject || '',
-      r.status || '',
-      tagsJson,
-      r.notes || '',
+      r['class'] || '', r.weekStart || '', r.teacher || '',
+      r.studentAdmNo || r.studentId || '', r.date || '', r.sessionId || '',
+      r.subject || '', r.status || '', tagsJson, r.notes || '',
       r.submittedAt || nowIso
     ];
   });
-  if (rows.length) {
-    sh.getRange(sh.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
-  }
+  if (rows.length) sh.getRange(sh.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
   return ok_({ written: rows.length });
 }
 
-// Legacy submitToAdmin payload shape -> flat attendance rows.
 function expandSubmission_(sub) {
   const out = [];
   const data = (sub && sub.data) || {};
@@ -217,23 +202,14 @@ function expandSubmission_(sub) {
     if (!rec.status || rec.status === 'U') return;
     const parts = String(key).split('|');
     if (parts.length < 2) return;
-    const studentAdmNo = parts[0];
-    const date = parts[1];
-    const sessionId = parts[2] || '';
+    const studentAdmNo = parts[0], date = parts[1], sessionId = parts[2] || '';
     if (sessionId === 'tags' || sessionId === 'notes') return;
     out.push({
-      submissionId: sub.id || '',
-      'class':      sub['class'] || '',
-      weekStart:    sub.weekStart || '',
-      teacher:      sub.teacher || '',
-      studentAdmNo: studentAdmNo,
-      date:         date,
-      sessionId:    sessionId,
-      subject:      rec.subject || '',
-      status:       rec.status,
-      tags:         rec.tags || null,
-      notes:        rec.notes || '',
-      submittedAt:  submittedAt
+      submissionId: sub.id || '', 'class': sub['class'] || '',
+      weekStart: sub.weekStart || '', teacher: sub.teacher || '',
+      studentAdmNo: studentAdmNo, date: date, sessionId: sessionId,
+      subject: rec.subject || '', status: rec.status,
+      tags: rec.tags || null, notes: rec.notes || '', submittedAt: submittedAt
     });
   });
   return out;
@@ -245,7 +221,6 @@ function upsertRow_(sheetName, keyCol, obj) {
   }
   const keyValue = String(obj[keyCol]).trim();
   obj[keyCol] = keyValue;
-
   const sh = getSheet_(sheetName);
   const headers = SHEETS[sheetName];
   const keyColIndex = headers.indexOf(keyCol) + 1;
@@ -267,10 +242,7 @@ function deleteRow_(sheetName, keyCol, value) {
   const headers = SHEETS[sheetName];
   const keyColIndex = headers.indexOf(keyCol) + 1;
   const row = findRowIndex_(sh, keyColIndex, keyValue);
-  if (row > 0) {
-    sh.deleteRow(row);
-    return ok_({ deleted: 1, key: keyValue });
-  }
+  if (row > 0) { sh.deleteRow(row); return ok_({ deleted: 1, key: keyValue }); }
   return ok_({ deleted: 0, key: keyValue });
 }
 
@@ -285,6 +257,87 @@ function setConfigValue_(key, value) {
   }
   sh.appendRow([key, value, nowIso]);
   return ok_({ inserted: 1, key: key });
+}
+
+// Bulk update Config from a {key:value} object — used by the school settings panel.
+function setConfigBulk_(obj) {
+  if (!obj || typeof obj !== 'object') return err_('bad_payload', 400);
+  let n = 0;
+  Object.keys(obj).forEach(function(k) {
+    if (!k) return;
+    setConfigValue_(k, obj[k]);
+    n++;
+  });
+  return ok_({ written: n });
+}
+
+// Rename a class. Cascades to Students.Class, Teachers.Classes (csv),
+// Timetable.Class, Subjects.Class. Attendance.Class is intentionally NOT
+// updated (historical records stay under their original class code).
+function renameClass_(oldCode, newCode) {
+  oldCode = String(oldCode || '').trim();
+  newCode = String(newCode || '').trim();
+  if (!oldCode || !newCode) return err_('missing_code', 400);
+  if (oldCode === newCode) return ok_({ unchanged: true });
+
+  const counts = { class: 0, students: 0, teachers: 0, timetable: 0, subjects: 0 };
+
+  const classesSh = getSheet_('Classes');
+  const classRow = findRowIndex_(classesSh, 1, oldCode);
+  if (classRow > 0) {
+    const colCount = SHEETS.Classes.length;
+    const existing = classesSh.getRange(classRow, 1, 1, colCount).getValues()[0];
+    existing[0] = newCode;
+    existing[colCount - 1] = new Date().toISOString();
+    classesSh.getRange(classRow, 1, 1, colCount).setValues([existing]);
+    counts.class = 1;
+  }
+
+  function rewriteColumn(sheetName, colName) {
+    const sh = getSheet_(sheetName);
+    const colIdx = SHEETS[sheetName].indexOf(colName) + 1;
+    const last = sh.getLastRow();
+    if (last < 2) return 0;
+    const range = sh.getRange(2, colIdx, last - 1, 1);
+    const vals = range.getValues();
+    let changed = false, n = 0;
+    for (let i = 0; i < vals.length; i++) {
+      if (String(vals[i][0]) === oldCode) { vals[i][0] = newCode; changed = true; n++; }
+    }
+    if (changed) range.setValues(vals);
+    return n;
+  }
+
+  counts.students  = rewriteColumn('Students',  'Class');
+  counts.timetable = rewriteColumn('Timetable', 'Class');
+  counts.subjects  = rewriteColumn('Subjects',  'Class');
+
+  const teachersSh = getSheet_('Teachers');
+  const tCol = SHEETS.Teachers.indexOf('Classes') + 1;
+  const lastT = teachersSh.getLastRow();
+  if (lastT > 1) {
+    const range = teachersSh.getRange(2, tCol, lastT - 1, 1);
+    const vals = range.getValues();
+    let changed = false;
+    for (let i = 0; i < vals.length; i++) {
+      const csv = String(vals[i][0] || '');
+      if (!csv) continue;
+      const parts = csv.split(',').map(function(s) { return s.trim(); });
+      let touched = false;
+      const newParts = parts.map(function(p) {
+        if (p === oldCode) { touched = true; return newCode; }
+        return p;
+      });
+      if (touched) {
+        vals[i][0] = newParts.filter(Boolean).join(',');
+        changed = true;
+        counts.teachers++;
+      }
+    }
+    if (changed) range.setValues(vals);
+  }
+
+  return ok_(counts);
 }
 
 // ===== entry points =====
@@ -302,9 +355,7 @@ function doGet(e) {
       if (p.date)    { p.from = p.date; p.to = p.date; }
     }
 
-    if (!action || action === 'ping') {
-      return ok_({ pong: true, time: new Date().toISOString() });
-    }
+    if (!action || action === 'ping') return ok_({ pong: true, time: new Date().toISOString() });
     if (action === 'getConfig')   return ok_(readConfig_());
     if (action === 'getStudents') {
       let rows = readAll_('Students');
@@ -313,6 +364,11 @@ function doGet(e) {
     }
     if (action === 'getTeachers') return ok_(readAll_('Teachers'));
     if (action === 'getClasses')  return ok_(readAll_('Classes'));
+    if (action === 'getSubjects') {
+      let rows = readAll_('Subjects');
+      if (p['class']) rows = rows.filter(function(r) { return String(r.Class) === p['class']; });
+      return ok_(rows);
+    }
     if (action === 'getTimetable') {
       let rows = readAll_('Timetable');
       if (p['class']) rows = rows.filter(function(r) { return String(r.Class) === p['class']; });
@@ -338,10 +394,8 @@ function doPost(e) {
   try {
     const raw = (e && e.postData && e.postData.contents) || '';
     if (!raw) return err_('empty_body', 400);
-
     let body;
-    try { body = JSON.parse(raw); }
-    catch (ex) { return err_('bad_json: ' + ex.message, 400); }
+    try { body = JSON.parse(raw); } catch (ex) { return err_('bad_json: ' + ex.message, 400); }
 
     if (Array.isArray(body)) {
       const provided = (e.parameter && e.parameter.submissionCode) || '';
@@ -356,9 +410,8 @@ function doPost(e) {
     if (!checkSubmissionCode_(submissionCode)) return err_('invalid_submission_code', 401);
 
     if (action === 'submitAttendance' || action === 'syncAttendance') {
-      const records = Array.isArray(p.records)
-        ? p.records
-        : (p.submission ? expandSubmission_(p.submission) : []);
+      const records = Array.isArray(p.records) ? p.records
+                    : (p.submission ? expandSubmission_(p.submission) : []);
       return writeAttendanceBatch_(records);
     }
 
@@ -368,9 +421,13 @@ function doPost(e) {
     if (action === 'deleteTeacher')   return deleteRow_('Teachers',  'TeacherId',   p.TeacherId || p.Teacher_ID);
     if (action === 'upsertClass')     return upsertRow_('Classes',   'ClassCode',   normalizeClass_(p));
     if (action === 'deleteClass')     return deleteRow_('Classes',   'ClassCode',   p.ClassCode);
+    if (action === 'renameClass')     return renameClass_(p.oldCode, p.newCode);
+    if (action === 'upsertSubject')   return upsertRow_('Subjects',  'SubjectCode', normalizeSubject_(p));
+    if (action === 'deleteSubject')   return deleteRow_('Subjects',  'SubjectCode', p.SubjectCode);
     if (action === 'upsertTimetable') return upsertRow_('Timetable', 'TimetableId', normalizeTimetable_(p));
     if (action === 'deleteTimetable') return deleteRow_('Timetable', 'TimetableId', p.TimetableId);
     if (action === 'setConfigValue')  return setConfigValue_(p.key, p.value);
+    if (action === 'setConfigBulk')   return setConfigBulk_(p.values || p);
 
     if (action === 'bulkUpsertStudents') {
       const list = Array.isArray(p.students) ? p.students : [];
@@ -399,6 +456,15 @@ function doPost(e) {
       });
       return ok_({ written: n });
     }
+    if (action === 'bulkUpsertSubjects') {
+      const list = Array.isArray(p.subjects) ? p.subjects : [];
+      let n = 0;
+      list.forEach(function(s) {
+        const norm = normalizeSubject_(s);
+        if (norm.SubjectCode) { upsertRow_('Subjects', 'SubjectCode', norm); n++; }
+      });
+      return ok_({ written: n });
+    }
 
     return err_('unknown_action: ' + action, 400);
   } catch (ex) {
@@ -406,7 +472,7 @@ function doPost(e) {
   }
 }
 
-// ===== editor-only helpers (run from Apps Script editor) =====
+// ===== editor-only helpers =====
 
 function setupSheets() {
   ensureAllSheets_();
@@ -418,9 +484,6 @@ function setSubmissionCodeFromEditor() {
   Logger.log('submissionCode written to Config sheet.');
 }
 
-// Call this from the editor (Run > realignAllHeaders) if you want to force
-// a one-shot rewrite of every tab's row 1 to the canonical headers without
-// hitting the web app. Useful after manually editing the sheet.
 function realignAllHeaders() {
   Object.keys(SHEETS).forEach(function(name) {
     const sh = ss_().getSheetByName(name);
