@@ -465,6 +465,15 @@ function doPost(e) {
       });
       return ok_({ written: n });
     }
+    if (action === 'bulkUpsertTimetable') {
+      const list = Array.isArray(p.timetable) ? p.timetable : [];
+      let n = 0;
+      list.forEach(function(t) {
+        const norm = normalizeTimetable_(t);
+        if (norm.TimetableId) { upsertRow_('Timetable', 'TimetableId', norm); n++; }
+      });
+      return ok_({ written: n });
+    }
 
     return err_('unknown_action: ' + action, 400);
   } catch (ex) {

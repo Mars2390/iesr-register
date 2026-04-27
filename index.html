@@ -3556,6 +3556,7 @@
           <button id="manageClassesBtn" class="muted-btn"><i class="fas fa-school"></i> Manage Classes</button>
           <button id="manageSubjectsBtn" class="muted-btn"><i class="fas fa-book"></i> Manage Subjects</button>
           <button id="schoolSettingsBtn" class="muted-btn"><i class="fas fa-cog"></i> School Settings</button>
+          <button id="migrateDataBtn" class="muted-btn" title="Copy CLASS_CONFIG (legacy hardcoded data) into the Sheet — classes, students, teachers, timetable, subjects"><i class="fas fa-database"></i> Migrate Data</button>
         </div>
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
           <!-- Submission code is sent automatically with each submission;
@@ -4863,6 +4864,7 @@
         deleteTeacher:      (teacherId)    => post('deleteTeacher',      { TeacherId: teacherId }),
         upsertTimetable:    (entry)        => post('upsertTimetable',    entry),
         deleteTimetable:    (id)           => post('deleteTimetable',    { TimetableId: id }),
+        bulkUpsertTimetable: (timetable)   => post('bulkUpsertTimetable',{ timetable: timetable }),
         setConfigValue:     (key, value)   => post('setConfigValue',     { key: key, value: value }),
         bulkUpsertStudents: (students)     => post('bulkUpsertStudents', { students: students }),
         bulkUpsertTeachers: (teachers)     => post('bulkUpsertTeachers', { teachers: teachers }),
@@ -5340,6 +5342,17 @@
         writeCache(SUBJECTS_CACHE_KEY, cache);
         return result;
       }
+      // Chunked bulk wrappers used by migrateLegacyData (Stage 8). Reuse the
+      // _runChunkedBulk helper so each batch stays inside Apps Script's HTTP
+      // window even when migrating hundreds of rows at once.
+      async function bulkUpsertTimetable(entries) {
+        const arr = entries.map(timetableToSheet).filter(t => t.TimetableId && t.Class && t.Day);
+        return _runChunkedBulk(arr, SheetsAPI.bulkUpsertTimetable, refreshTimetable, 'bulkUpsertTimetable');
+      }
+      async function bulkUpsertSubjects(subjects) {
+        const arr = subjects.map(subjectToSheet).filter(s => s.SubjectCode && s.SubjectName && s.Class);
+        return _runChunkedBulk(arr, SheetsAPI.bulkUpsertSubjects, refreshSubjects, 'bulkUpsertSubjects');
+      }
 
       // ----- rename class with cascade (Stage 7) -----
       // Tells the server to update the Classes row AND every reference in
@@ -5382,10 +5395,10 @@
         upsertTeacher, deleteTeacher, bulkUpsertTeachers,
         // class writes (Stage 5 + Stage 7 rename)
         upsertClass, deleteClass, bulkUpsertClasses, renameClass,
-        // timetable writes (Stage 6)
-        upsertTimetable, deleteTimetable,
-        // subject writes (Stage 7)
-        upsertSubject, deleteSubject,
+        // timetable writes (Stage 6 + Stage 8 bulk)
+        upsertTimetable, deleteTimetable, bulkUpsertTimetable,
+        // subject writes (Stage 7 + Stage 8 bulk)
+        upsertSubject, deleteSubject, bulkUpsertSubjects,
         // school settings (Stage 7)
         setSchoolSettings,
         // crypto
@@ -6711,6 +6724,7 @@
                 'openManageClasses': openManageClasses,
                 'openManageSubjects': openManageSubjects,
                 'openSchoolSettings': openSchoolSettings,
+                'runMigrateData': runMigrateData,
             };
             const fn = callbackMap[callbackName] || window[callbackName];
             if (typeof fn === 'function') fn();
@@ -6966,6 +6980,9 @@
     });
     document.getElementById('schoolSettingsBtn').addEventListener('click', function() {
         showAdminPinVerification('openSchoolSettings', 'edit school settings');
+    });
+    document.getElementById('migrateDataBtn').addEventListener('click', function() {
+        showAdminPinVerification('runMigrateData', 'migrate legacy data to Sheet');
     });
 
     document.getElementById('clearWeek').addEventListener('click', function() {
@@ -12874,7 +12891,7 @@
         );
         if (!proceed) return { aborted: true };
 
-        const result = { classes: 0, students: 0, teachers: 0, errors: [] };
+        const result = { classes: 0, students: 0, teachers: 0, timetable: 0, subjects: 0, errors: [] };
 
         // ----- 1. Classes -----
         try {
@@ -12971,9 +12988,97 @@
             }
         }
 
+        // ----- 4. Timetable + 5. Subjects (Stage 8) -----
+        // CLASS_CONFIG[code].defaultSessions has shape:
+        //   { DAY: 'MON', TIME: '08:00AM TO 10:00AM', SUBJECT: '...', LECTURER: 'NAME' }
+        // We split TIME into 24h StartTime/EndTime, derive a deterministic
+        // TimetableId so re-running migration is idempotent, and collect a
+        // unique (Class, SUBJECT) set for the Subjects tab.
+        function parseTimePart_(s) {
+            const m = String(s || '').trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+            if (!m) return '';
+            let h = parseInt(m[1], 10);
+            const min = m[2];
+            const ampm = (m[3] || '').toUpperCase();
+            if (ampm === 'AM' && h === 12) h = 0;
+            else if (ampm === 'PM' && h < 12) h += 12;
+            return String(h).padStart(2, '0') + ':' + min;
+        }
+        function parseTimeRange_(timeStr) {
+            const parts = String(timeStr || '').split(/\s+TO\s+/i).map(s => s.trim());
+            if (parts.length !== 2) return ['', ''];
+            return [parseTimePart_(parts[0]), parseTimePart_(parts[1])];
+        }
+        function slugify_(s) {
+            return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/(^_|_$)/g, '');
+        }
+
+        const allTimetable = [];
+        const subjectsByClass = {};   // { classCode: Set<subjectName> }
+        codes.forEach(code => {
+            const sessions = (CLASS_CONFIG[code] && CLASS_CONFIG[code].defaultSessions) || [];
+            sessions.forEach(s => {
+                if (!s || !s.DAY || !s.TIME || !s.SUBJECT) return;
+                const [start, end] = parseTimeRange_(s.TIME);
+                const day = String(s.DAY).toUpperCase();
+                allTimetable.push({
+                    TimetableId: 'tt_' + slugify_(code) + '_' + day + '_' + start.replace(':', '') + '_' + slugify_(s.SUBJECT),
+                    Class:       code,
+                    Day:         day,
+                    StartTime:   start,
+                    EndTime:     end,
+                    Subject:     s.SUBJECT,
+                    TeacherId:   s.LECTURER || '',
+                });
+                if (!subjectsByClass[code]) subjectsByClass[code] = new Set();
+                subjectsByClass[code].add(s.SUBJECT);
+            });
+        });
+
+        if (allTimetable.length) {
+            try {
+                const r = await SheetData.bulkUpsertTimetable(allTimetable);
+                result.timetable = (r && r.written) || 0;
+                if (r && r.errors && r.errors.length) {
+                    r.errors.forEach(e => result.errors.push('Timetable batch — ' + e));
+                }
+            } catch (e) {
+                result.errors.push('Timetable: ' + e.message);
+            }
+        }
+
+        const allSubjects = [];
+        Object.keys(subjectsByClass).forEach(code => {
+            Array.from(subjectsByClass[code]).forEach(name => {
+                allSubjects.push({
+                    SubjectCode: slugify_(code) + '_' + slugify_(name),
+                    SubjectName: name,
+                    Class:       code,
+                    Active:      true,
+                });
+            });
+        });
+
+        if (allSubjects.length) {
+            try {
+                const r = await SheetData.bulkUpsertSubjects(allSubjects);
+                result.subjects = (r && r.written) || 0;
+                if (r && r.errors && r.errors.length) {
+                    r.errors.forEach(e => result.errors.push('Subjects batch — ' + e));
+                }
+            } catch (e) {
+                result.errors.push('Subjects: ' + e.message);
+            }
+        }
+
         await SheetData.refreshAll();
 
-        let summary = `Migration complete.\n\n• Classes: ${result.classes}\n• Students: ${result.students}\n• Teachers: ${result.teachers} (PINs not set — use Reset PIN before login)`;
+        let summary = `Migration complete.\n\n` +
+                      `• Classes: ${result.classes}\n` +
+                      `• Students: ${result.students}\n` +
+                      `• Teachers: ${result.teachers} (PINs not set — use Reset PIN before login)\n` +
+                      `• Timetable entries: ${result.timetable || 0}\n` +
+                      `• Subjects: ${result.subjects || 0}`;
         if (result.errors.length) summary += '\n\nERRORS:\n' + result.errors.join('\n');
         alert(summary);
         return result;
@@ -13729,26 +13834,73 @@
             return;
         }
         
-        let html = `<div><strong>${teacher}'s Schedule</strong></div>`;
-        
+        let html = `<div><strong>${teacher}'s Schedule (${currentClass || 'class'})</strong></div>`;
+
         dayMap.forEach(day => {
             const daySessions = teacherSessions.filter(s => s.DAY === day);
             if (daySessions.length) {
                 const isCurrentDay = (day === currentDay);
                 const dayClass = isCurrentDay ? ' style="background:#eef8ff;padding:4px;border-radius:4px;"' : '';
                 html += `<div${dayClass}><div style="margin-top:6px;font-weight:600">${day}:</div>`;
-                
+
                 daySessions.forEach(s => {
                     html += `<div class="schedule-item">
                         <div>${s.TIME}</div>
                         <div class="subtle">${s.SUBJECT}</div>
                     </div>`;
                 });
-                
+
                 html += `</div>`;
             }
         });
-        
+
+        // Stage 8: append cross-class summary from the Sheet's Timetable tab.
+        // This shows the teacher every session they have across ALL classes,
+        // so they can see their full week without switching class context.
+        // Filter by teacher name (case-insensitive). Multi-teacher LECTURER
+        // strings like "KIRIGWI/NGANA" are handled by splitting on "/".
+        try {
+            const allEntries = SheetData.getCachedTimetable();
+            const myEntries = allEntries.filter(e => {
+                const tid = String(e.TeacherId || '').toUpperCase();
+                if (!tid) return false;
+                if (tid === teacherUpper) return true;
+                return tid.split('/').map(s => s.trim()).indexOf(teacherUpper) >= 0;
+            });
+
+            html += '<div style="margin-top:12px;padding-top:10px;border-top:1px dashed #ccd5e0">';
+            html += '<div><strong>My Weekly Schedule (all classes — from Sheet)</strong></div>';
+
+            if (!myEntries.length) {
+                html += '<div class="subtle" style="margin-top:6px">No Sheet timetable entries for ' + teacher + '. Run "Migrate Data" or add entries via Manage Timetable.</div>';
+            } else {
+                myEntries.sort((a, b) => {
+                    const da = dayMap.indexOf(String(a.Day || '').toUpperCase());
+                    const db = dayMap.indexOf(String(b.Day || '').toUpperCase());
+                    if (da !== db) return da - db;
+                    return String(a.StartTime || '').localeCompare(String(b.StartTime || ''));
+                });
+                dayMap.forEach(day => {
+                    const dayEntries = myEntries.filter(e => String(e.Day || '').toUpperCase() === day);
+                    if (!dayEntries.length) return;
+                    const isCurrentDay = (day === currentDay);
+                    const dayCss = isCurrentDay ? ' style="background:#eef8ff;padding:4px;border-radius:4px;"' : '';
+                    html += '<div' + dayCss + '><div style="margin-top:6px;font-weight:600">' + day + ':</div>';
+                    dayEntries.forEach(e => {
+                        const time = (e.StartTime || '') + ((e.StartTime || e.EndTime) ? ' - ' : '') + (e.EndTime || '');
+                        html += '<div class="schedule-item">'
+                              + '<div>' + (time || '(no time)') + '</div>'
+                              + '<div class="subtle">' + (e.Subject || '') + ' · <code>' + (e.Class || '') + '</code></div>'
+                              + '</div>';
+                    });
+                    html += '</div>';
+                });
+            }
+            html += '</div>';
+        } catch (e) {
+            console.warn('[renderTeacherSchedule] cross-class summary failed:', e.message);
+        }
+
         container.innerHTML = html;
     }
 
