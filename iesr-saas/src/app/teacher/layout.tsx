@@ -10,7 +10,7 @@ export default async function TeacherLayout({ children }: { children: React.Reac
   return (
     <div className="min-h-screen bg-slate-50">
       <TeacherHeader name={session.name} />
-      <main className="container-page py-6 sm:py-8">{children}</main>
+      <main className="w-full px-3 py-5 sm:px-5 lg:px-6">{children}</main>
     </div>
   );
 }
