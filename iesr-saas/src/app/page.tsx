@@ -273,28 +273,64 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* footer */}
-      <footer className="bg-kplc-navy pt-16 text-white/80">
+      {/* footer — real IESR institutional details */}
+      <footer className="bg-[#0a1326] pt-16 text-white/80">
         <div className="container-page grid gap-10 pb-12 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="lg:col-span-2">
-            <div className="flex items-center gap-3">
-              <span className="relative h-11 w-11 overflow-hidden rounded-full ring-2 ring-white/30">
-                <Image src="/images/iesr-3.jpg" alt="Kenya Power IESR" fill sizes="44px" className="object-cover" />
-              </span>
-              <div>
-                <p className="font-bold text-white">IESR Register</p>
-                <p className="text-xs text-white/60">Institute of Energy Studies &amp; Research</p>
-              </div>
-            </div>
-            <p className="mt-4 max-w-sm text-sm text-white/60">A secure, cloud-backed attendance platform for Kenya Power&apos;s training institute.</p>
+          <div>
+            <FooterHeading>Courses</FooterHeading>
+            <ul className="mt-4 space-y-2 text-sm text-white/70">
+              {["Safety Competency in Power Systems", "Project Management", "Advanced Excel", "Leadership and Supervision", "Renewable Energy–Solar PV System"].map((c) => (
+                <li key={c}>{c}</li>
+              ))}
+            </ul>
           </div>
-          <FooterCol title="Platform" links={[["Features", "#features"], ["How it works", "#how"], ["For teams", "#who"], ["Log in", "/login"]]} />
-          <FooterCol title="Institute" links={[["About IESR", "#about"], ["Kenya Power", "#about"], ["Contact", "#about"]]} />
+
+          <div>
+            <FooterHeading>Links</FooterHeading>
+            <ul className="mt-4 space-y-2 text-sm">
+              {[
+                ["IESR", "https://www.iesr.ac.ke"],
+                ["KPLC", "https://www.kplc.co.ke"],
+                ["RES4AFRICA", "https://www.res4africa.org"],
+                ["RES4MED", "https://www.res4africa.org"],
+              ].map(([label, href]) => (
+                <li key={label}>
+                  <a href={href} target="_blank" rel="noreferrer" className="text-white/70 transition-colors hover:text-kplc-yellow">{label}</a>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div>
+            <FooterHeading>About us</FooterHeading>
+            <p className="mt-4 text-sm leading-relaxed text-white/70">
+              The Institute of Energy Studies and Research (IESR) was established in 1957 with the aim of developing
+              technical and supervisory skills to the then East African Power and Lighting Company employees.
+            </p>
+          </div>
+
+          <div>
+            <FooterHeading>Contact us</FooterHeading>
+            <ul className="mt-4 space-y-1.5 text-sm text-white/70">
+              <li className="font-medium text-white/85">Institute of Energy Studies &amp; Research</li>
+              <li>P. O. Box 10355 – 00100, Nairobi</li>
+              <li>Tel: +254 020 266348/6, 0725 559900</li>
+              <li>Email: <a href="mailto:info@iesr.ac.ke" className="text-white/80 hover:text-kplc-yellow">info@iesr.ac.ke</a></li>
+            </ul>
+          </div>
         </div>
+
         <div className="border-t border-white/10">
           <div className="container-page flex flex-col items-center justify-between gap-3 py-6 sm:flex-row">
-            <p className="text-xs text-white/50">© {new Date().getFullYear()} Kenya Power · Institute of Energy Studies &amp; Research. All rights reserved.</p>
-            <p className="text-xs text-white/50">Secure · Cloud-backed · Real-time</p>
+            <div className="flex items-center gap-2.5">
+              <span className="relative h-8 w-8 overflow-hidden rounded-full bg-white ring-1 ring-white/30">
+                <Image src="/images/iesr-3.jpg" alt="IESR" fill sizes="32px" className="object-cover" />
+              </span>
+              <span className="text-sm font-semibold text-white">IESR Attendance System</span>
+            </div>
+            <p className="text-center text-xs text-white/50">
+              © {new Date().getFullYear()} Institute of Energy Studies &amp; Research · Kenya Power. All rights reserved.
+            </p>
           </div>
         </div>
       </footer>
@@ -302,15 +338,11 @@ export default function LandingPage() {
   );
 }
 
-function FooterCol({ title, links }: { title: string; links: [string, string][] }) {
+function FooterHeading({ children }: { children: React.ReactNode }) {
   return (
-    <div>
-      <p className="text-sm font-semibold uppercase tracking-wide text-white">{title}</p>
-      <ul className="mt-4 space-y-2.5">
-        {links.map(([label, href]) => (
-          <li key={label}><a href={href} className="text-sm text-white/60 transition-colors hover:text-white">{label}</a></li>
-        ))}
-      </ul>
-    </div>
+    <h3 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-kplc-yellow">
+      <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" /><path d="M12 11v5M12 8h.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
+      {children}
+    </h3>
   );
 }
