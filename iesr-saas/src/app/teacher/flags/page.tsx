@@ -5,7 +5,7 @@ import { formatDateDisplay } from "@/lib/dates";
 
 const STATUS_STYLE: Record<string, string> = {
   open: "bg-amber-100 text-amber-700",
-  acknowledged: "bg-brand-50 text-brand-700",
+  acknowledged: "bg-kplc-navy/10 text-kplc-navy",
   resolved: "bg-emerald-100 text-emerald-700",
 };
 

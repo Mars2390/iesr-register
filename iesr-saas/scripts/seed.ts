@@ -79,6 +79,15 @@ const TIMETABLE: TT[] = [
 
 (async () => {
   if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL not set");
+  // SAFETY: this script DELETES the whole "iesr-demo" school by slug and recreates
+  // it — which would also wipe the REAL migrated data that now lives in that same
+  // school. Refuse to run unless explicitly forced.
+  if (process.env.ALLOW_DEMO_SEED !== "yes") {
+    throw new Error(
+      "Refusing to seed: this wipes the entire 'iesr-demo' school (including real " +
+      "migrated data). Set ALLOW_DEMO_SEED=yes only on a throwaway database.",
+    );
+  }
   const db = drizzle(neon(process.env.DATABASE_URL), { schema });
 
   // wipe any previous demo data (FKs cascade from schools)

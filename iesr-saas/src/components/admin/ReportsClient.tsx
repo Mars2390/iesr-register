@@ -71,7 +71,7 @@ export function ReportsClient({ options, initial, from, to }: { options: Options
 
       {/* overview */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
-        <Tile label="Attendance" value={`${overview.rate}%`} accent="brand" />
+        <Tile label="Attendance" value={`${overview.rate}%`} accent="navy" />
         <Tile label="Sessions" value={overview.total} />
         <Tile label="Present" value={overview.present} accent="emerald" />
         <Tile label="Absent" value={overview.absent} accent="rose" />
@@ -169,7 +169,7 @@ export function ReportsClient({ options, initial, from, to }: { options: Options
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return <div><label className="mb-1 block text-xs font-medium text-slate-500">{label}</label>{children}</div>;
 }
-function Tile({ label, value, accent }: { label: string; value: string | number; accent?: "brand" | "emerald" | "rose" | "amber" }) {
-  const c = accent ? { brand: "text-brand-700 bg-brand-50", emerald: "text-emerald-700 bg-emerald-50", rose: "text-rose-700 bg-rose-50", amber: "text-amber-700 bg-amber-50" }[accent] : "text-slate-900 bg-white border border-slate-200";
+function Tile({ label, value, accent }: { label: string; value: string | number; accent?: "navy" | "emerald" | "rose" | "amber" }) {
+  const c = accent ? { navy: "text-kplc-navy bg-kplc-navy/5", emerald: "text-emerald-700 bg-emerald-50", rose: "text-rose-700 bg-rose-50", amber: "text-amber-700 bg-amber-50" }[accent] : "text-slate-900 bg-white border border-slate-200";
   return <div className={`rounded-2xl px-4 py-3 ${c}`}><p className="font-display text-2xl font-bold">{value}</p><p className="text-xs font-medium opacity-80">{label}</p></div>;
 }

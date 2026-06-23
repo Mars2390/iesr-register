@@ -54,7 +54,7 @@ export function MonitorClient({ initial }: { initial: Data }) {
 
       {/* today's totals */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <Tile label="Marking now" n={data.active.length} accent="brand" />
+        <Tile label="Marking now" n={data.active.length} accent="navy" />
         <Tile label="Present today" n={data.today.present} accent="emerald" />
         <Tile label="Absent today" n={data.today.absent} accent="rose" />
         <Tile label="Late today" n={data.today.late} accent="amber" />
@@ -81,7 +81,7 @@ export function MonitorClient({ initial }: { initial: Data }) {
                 </div>
                 <p className="mt-3 text-lg font-semibold text-slate-900">{m.teacherName ?? "Unknown"}</p>
                 <p className="text-sm text-slate-600">{m.className ?? m.classCode ?? "—"}</p>
-                {m.subject && <p className="mt-1 text-sm text-brand-600">{m.subject}</p>}
+                {m.subject && <p className="mt-1 text-sm font-medium text-kplc-blue">{m.subject}</p>}
               </div>
             ))}
           </div>
@@ -91,9 +91,9 @@ export function MonitorClient({ initial }: { initial: Data }) {
   );
 }
 
-function Tile({ label, n, accent }: { label: string; n: number; accent: "brand" | "emerald" | "rose" | "amber" }) {
+function Tile({ label, n, accent }: { label: string; n: number; accent: "navy" | "emerald" | "rose" | "amber" }) {
   const c = {
-    brand: "text-brand-700 bg-brand-50",
+    navy: "text-kplc-navy bg-kplc-navy/5",
     emerald: "text-emerald-700 bg-emerald-50",
     rose: "text-rose-700 bg-rose-50",
     amber: "text-amber-700 bg-amber-50",

@@ -17,7 +17,7 @@
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4",
     "drizzle-orm": "^0.36.4",
-    "framer-motion": "^11.11.17",
+    "framer-motion": "^11.18.2",
     "jose": "^5.9.6",
     "jspdf": "^2.5.2",
     "jspdf-autotable": "^3.8.4",

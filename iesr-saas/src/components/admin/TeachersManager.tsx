@@ -103,7 +103,7 @@ export function TeachersManager({ initial, classes }: { initial: TeacherRow[]; c
               <div className="max-h-44 space-y-1.5 overflow-y-auto rounded-xl border border-slate-200 p-3">
                 {classes.map((c) => (
                   <label key={c.id} className="flex cursor-pointer items-center gap-2 text-sm">
-                    <input type="checkbox" checked={form.classIds.includes(c.id)} onChange={() => toggleClass(c.id)} className="h-4 w-4 rounded border-slate-300 text-brand-600" />
+                    <input type="checkbox" checked={form.classIds.includes(c.id)} onChange={() => toggleClass(c.id)} className="h-4 w-4 rounded border-slate-300 text-kplc-navy" />
                     {c.displayName}
                   </label>
                 ))}

@@ -56,7 +56,7 @@ export default async function AdminOverview() {
         <section>
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">Recent activity</h2>
-            <Link href="/admin/activity" className="text-sm font-medium text-brand-600 hover:text-brand-700">View all</Link>
+            <Link href="/admin/activity" className="text-sm font-medium text-kplc-blue hover:text-kplc-navy">View all</Link>
           </div>
           <div className="card divide-y divide-slate-100">
             {activity.length === 0 ? (
@@ -81,7 +81,7 @@ export default async function AdminOverview() {
         <section>
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">Open flags</h2>
-            <Link href="/admin/flags" className="text-sm font-medium text-brand-600 hover:text-brand-700">Triage</Link>
+            <Link href="/admin/flags" className="text-sm font-medium text-kplc-blue hover:text-kplc-navy">Triage</Link>
           </div>
           <div className="card divide-y divide-slate-100">
             {openFlags.length === 0 ? (
