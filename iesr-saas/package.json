@@ -10,8 +10,8 @@
     "db:push": "drizzle-kit push",
     "db:generate": "drizzle-kit generate",
     "db:studio": "drizzle-kit studio",
-    "db:setup": "node --import tsx db/run-sql.ts db/schema.sql",
-    "db:seed": "node --import tsx db/seed.ts"
+    "db:setup": "node --import tsx scripts/run-sql.ts db/schema.sql",
+    "db:seed": "node --import tsx scripts/seed.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4",

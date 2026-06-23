@@ -1,6 +1,9 @@
 // Seed a demo school + admin PIN + one teacher PIN, so you can log in immediately.
 // Usage: npm run db:seed   (after npm run db:setup)
 // Prints the school id -> paste into .env as DEFAULT_SCHOOL_ID.
+//
+// Build/dev-time script (scripts/ is excluded in tsconfig, so `next build`
+// never type-checks or bundles it). Run via tsx (see package.json).
 import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
 import { pbkdf2 as _pbkdf2, randomBytes } from "node:crypto";
