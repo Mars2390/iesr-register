@@ -48,6 +48,21 @@ export function MarkingGrid({
 
   // After mount: align "today" highlight + default day to the user's timezone.
   useEffect(() => { setTodayStr(formatDate(new Date())); }, []);
+
+  // Presence heartbeat — tells the admin monitor who's marking which class.
+  useEffect(() => {
+    const beat = () =>
+      fetch("/api/presence", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          classId: classInfo.id, date: selectedDate,
+          sessionId: effectiveSessionId, subjectId: currentSession?.subjectId ?? null,
+        }),
+      }).catch(() => {});
+    beat();
+    const t = setInterval(beat, 20000);
+    return () => clearInterval(t);
+  }, [classInfo.id, selectedDate, effectiveSessionId, currentSession?.subjectId]);
   // Keep a valid session selected when the day changes.
   useEffect(() => { setSessionId(daySessions[0]?.sessionId ?? "DEFAULT"); }, [selectedDate]); // eslint-disable-line react-hooks/exhaustive-deps
 
