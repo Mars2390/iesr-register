@@ -56,7 +56,7 @@ export async function GET(req: Request) {
     } else {
       pdf = buildHoaPdf(computeOverview(rows), computeInsights(rows), range);
     }
-    return new NextResponse(pdf, {
+    return new NextResponse(new Blob([pdf], { type: "application/pdf" }), {
       headers: {
         "Content-Type": "application/pdf",
         "Content-Disposition": `attachment; filename="IESR_${type}_${stamp}.pdf"`,
