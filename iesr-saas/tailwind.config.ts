@@ -12,9 +12,16 @@ export default {
         accent: { 500: "#00c8ff" },
       },
       fontFamily: {
-        sans: ["Exo 2", "ui-sans-serif", "system-ui", "sans-serif"],
-        mono: ["Rajdhani", "ui-monospace", "monospace"],
+        sans: ["var(--font-sans)", "ui-sans-serif", "system-ui", "sans-serif"],
+        display: ["var(--font-display)", "ui-sans-serif", "system-ui", "sans-serif"],
       },
+      boxShadow: {
+        soft: "0 1px 2px rgba(2,6,23,.04), 0 8px 24px -12px rgba(2,6,23,.12)",
+      },
+      keyframes: {
+        "fade-up": { "0%": { opacity: "0", transform: "translateY(12px)" }, "100%": { opacity: "1", transform: "translateY(0)" } },
+      },
+      animation: { "fade-up": "fade-up .5s ease-out both" },
     },
   },
   plugins: [],
