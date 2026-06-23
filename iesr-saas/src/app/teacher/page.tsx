@@ -42,7 +42,7 @@ export default async function TeacherHome() {
               </div>
               <h3 className="mt-4 text-lg font-semibold text-slate-900">{c.displayName}</h3>
               <p className="mt-0.5 font-mono text-sm text-slate-500">{c.code}</p>
-              <span className="mt-5 inline-flex items-center gap-1.5 text-sm font-semibold text-brand-600 group-hover:gap-2.5 transition-all">
+              <span className="mt-5 inline-flex items-center gap-1.5 text-sm font-semibold text-kplc-navy group-hover:gap-2.5 transition-all">
                 Mark attendance
                 <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none">
                   <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />

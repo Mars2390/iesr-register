@@ -108,7 +108,7 @@ function Stat({ label, value, href, accent }: { label: string; value: number; hr
   return (
     <Link href={href} className="card p-5 transition hover:-translate-y-0.5 hover:shadow-md">
       <p className="text-sm font-medium text-slate-500">{label}</p>
-      <p className={`mt-2 font-display text-3xl font-bold ${accent === "amber" ? "text-amber-600" : "text-slate-900"}`}>{value}</p>
+      <p className={`mt-2 font-display text-3xl font-bold ${accent === "amber" ? "text-amber-600" : "text-kplc-navy"}`}>{value}</p>
     </Link>
   );
 }

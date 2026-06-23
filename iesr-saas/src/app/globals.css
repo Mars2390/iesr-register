@@ -26,7 +26,8 @@
            transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40
            disabled:pointer-events-none disabled:opacity-50;
   }
-  .btn-primary  { @apply btn bg-brand-600 text-white shadow-sm hover:bg-brand-700; }
+  .btn-primary  { @apply btn bg-kplc-navy text-white shadow-sm hover:bg-kplc-blue; }
+  .btn-accent   { @apply btn bg-kplc-yellow text-kplc-navy shadow-sm hover:brightness-95; }
   .btn-outline  { @apply btn border border-slate-200 bg-white text-slate-800 hover:border-slate-300 hover:bg-slate-50; }
   .btn-ghost    { @apply btn text-slate-700 hover:bg-slate-100; }
   .btn-lg       { @apply px-6 py-3 text-base; }
@@ -45,6 +46,17 @@
   .input {
     @apply w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900
            placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30;
+  }
+
+  /* ----- landing-page primitives ----- */
+  .glass {
+    @apply border border-white/15 bg-white/10 backdrop-blur-md;
+  }
+  .eyebrow {
+    @apply inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em];
+  }
+  .kplc-gradient-text {
+    @apply bg-gradient-to-r from-kplc-blue via-kplc-green to-kplc-yellow bg-clip-text text-transparent;
   }
 }
 

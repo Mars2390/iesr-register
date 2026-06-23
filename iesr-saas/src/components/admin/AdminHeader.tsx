@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { Logo } from "@/components/ui/Logo";
 
 const NAV = [
   { href: "/admin", label: "Overview", exact: true },
@@ -27,12 +27,16 @@ export function AdminHeader({ name }: { name: string }) {
   }
 
   return (
-    <header className="sticky top-0 z-40 border-b border-slate-200/70 bg-white/85 backdrop-blur">
+    <header className="sticky top-0 z-40 border-b border-white/10 bg-kplc-navy">
       <div className="container-page flex h-16 items-center justify-between gap-4">
         <Link href="/admin" className="flex shrink-0 items-center gap-2.5">
-          <Logo className="h-7 w-7" />
-          <span className="font-bold tracking-tight text-slate-900">IESR</span>
-          <span className="hidden rounded-full bg-brand-600 px-2 py-0.5 text-xs font-semibold text-white sm:inline">Admin</span>
+          <span className="relative h-8 w-8 overflow-hidden rounded-full ring-2 ring-white/30">
+            <Image src="/images/iesr-3.jpg" alt="IESR" fill sizes="32px" className="object-cover" />
+          </span>
+          <span className="font-bold tracking-tight text-white">
+            IESR<span className="text-kplc-yellow">·Register</span>
+          </span>
+          <span className="hidden rounded-full bg-kplc-yellow px-2 py-0.5 text-xs font-bold text-kplc-navy sm:inline">Admin</span>
         </Link>
 
         <nav className="flex min-w-0 items-center gap-1 overflow-x-auto">
@@ -41,7 +45,9 @@ export function AdminHeader({ name }: { name: string }) {
               key={n.href}
               href={n.href}
               className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-                isActive(n.href, n.exact) ? "bg-slate-100 text-slate-900" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                isActive(n.href, n.exact)
+                  ? "bg-white/15 text-white"
+                  : "text-white/70 hover:bg-white/10 hover:text-white"
               }`}
             >
               {n.label}
@@ -49,7 +55,9 @@ export function AdminHeader({ name }: { name: string }) {
           ))}
         </nav>
 
-        <button onClick={logout} className="btn-ghost shrink-0 px-3 py-1.5 text-sm">Sign out</button>
+        <button onClick={logout} className="shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium text-white/80 transition-colors hover:bg-white/10 hover:text-white">
+          Sign out
+        </button>
       </div>
     </header>
   );

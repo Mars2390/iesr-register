@@ -10,6 +10,13 @@ export default {
           50: "#eff6ff", 100: "#dbeafe", 500: "#0b66ff", 600: "#0a57db", 700: "#0846b0", 900: "#062b6b",
         },
         accent: { 500: "#00c8ff" },
+        // KPLC / IESR institutional palette (from the Kenya Power IESR mark)
+        kplc: {
+          navy: "#0b2e63",
+          blue: "#1466b8",
+          green: "#3aa856",
+          yellow: "#f5c518",
+        },
       },
       fontFamily: {
         sans: ["var(--font-sans)", "ui-sans-serif", "system-ui", "sans-serif"],

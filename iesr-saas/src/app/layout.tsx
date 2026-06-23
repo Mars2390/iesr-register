@@ -22,7 +22,7 @@ export const metadata: Metadata = {
   description:
     "Mark attendance in seconds, monitor every class in real time, and turn registers into insight. A modern attendance platform for schools and colleges.",
   applicationName: "IESR",
-  icons: { icon: "/favicon.ico" },
+  icons: { icon: "/images/iesr-4.jpg" },
 };
 
 export const viewport: Viewport = {
