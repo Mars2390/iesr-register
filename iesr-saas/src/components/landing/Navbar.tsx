@@ -26,17 +26,17 @@ export function Navbar() {
   return (
     <header className="fixed inset-x-0 top-0 z-50">
       {/* solid institutional bar — styled after the IESR portal */}
-      <div className={`bg-kplc-navy transition-shadow duration-300 ${scrolled ? "shadow-lg shadow-black/25" : ""}`}>
+      <div className={`bg-gradient-to-b from-[#274083] to-[#28478a] transition-shadow duration-300 ${scrolled ? "shadow-lg shadow-black/25" : ""}`}>
         <nav className="container-page flex h-16 items-center justify-between gap-4">
           {/* brand */}
           <Link href="/" className="flex items-center gap-3">
-            <span className="relative h-10 w-10 shrink-0 overflow-hidden rounded-full bg-white ring-2 ring-white/40">
-              <Image src="/images/iesr-3.jpg" alt="IESR" fill sizes="40px" className="object-cover" />
+            {/* no box/ring: the bar matches the logo blue so it blends edge-to-edge */}
+            <span className="relative h-12 w-12 shrink-0 overflow-hidden">
+              <Image src="/images/iesr-4.jpg" alt="IESR — Institute of Energy Studies & Research" fill sizes="48px" className="object-cover" />
             </span>
             <span className="leading-tight">
               <span className="block text-base font-extrabold tracking-tight text-white">
-                I<span className="text-kplc-yellow">E</span>S<span className="text-kplc-green">R</span>
-                <span className="ml-1 font-semibold text-white/90">Attendance</span>
+                IESR <span className="font-semibold text-white/80">Attendance</span>
               </span>
               <span className="hidden text-[11px] font-medium tracking-wide text-white/55 sm:block">
                 Institute of Energy Studies &amp; Research
@@ -68,7 +68,7 @@ export function Navbar() {
       {/* mobile menu */}
       <AnimatePresence>
         {open && (
-          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden border-b border-white/10 bg-kplc-navy lg:hidden">
+          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden border-b border-white/10 bg-[#28478a] lg:hidden">
             <div className="container-page flex flex-col gap-1 py-4">
               {LINKS.map(([label, href]) => (
                 <a key={href} href={href} onClick={() => setOpen(false)} className="rounded-lg px-3 py-2.5 text-sm font-medium text-white/85 hover:bg-white/10">{label}</a>

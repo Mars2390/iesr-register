@@ -112,8 +112,8 @@ export default function LoginPage() {
         {/* brand */}
         <div className="mb-6 text-center">
           <Link href="/" className="inline-flex flex-col items-center gap-3">
-            <span className="relative h-16 w-16 overflow-hidden rounded-full bg-white ring-2 ring-white/40">
-              <Image src="/images/iesr-3.jpg" alt="IESR" fill sizes="64px" className="object-cover" />
+            <span className="relative h-16 w-16 overflow-hidden rounded-2xl ring-2 ring-white/30">
+              <Image src="/images/iesr-4.jpg" alt="IESR" fill sizes="64px" className="object-cover" />
             </span>
             <span className="text-lg font-bold tracking-tight text-white">
               IESR <span className="text-kplc-yellow">Attendance System</span>

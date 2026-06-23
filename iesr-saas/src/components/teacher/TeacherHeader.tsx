@@ -27,8 +27,8 @@ export function TeacherHeader({ name }: { name: string }) {
     <header className="sticky top-0 z-40 border-b border-white/10 bg-kplc-navy">
       <div className="container-page flex h-16 items-center justify-between gap-4">
         <Link href="/teacher" className="flex items-center gap-2.5">
-          <span className="relative h-8 w-8 overflow-hidden rounded-full ring-2 ring-white/30">
-            <Image src="/images/iesr-3.jpg" alt="IESR" fill sizes="32px" className="object-cover" />
+          <span className="relative h-8 w-8 overflow-hidden rounded-lg ring-1 ring-white/25">
+            <Image src="/images/iesr-4.jpg" alt="IESR" fill sizes="32px" className="object-cover" />
           </span>
           <span className="font-bold tracking-tight text-white">
             IESR<span className="text-kplc-yellow">·Register</span>

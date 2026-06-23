@@ -323,8 +323,8 @@ export default function LandingPage() {
         <div className="border-t border-white/10">
           <div className="container-page flex flex-col items-center justify-between gap-3 py-6 sm:flex-row">
             <div className="flex items-center gap-2.5">
-              <span className="relative h-8 w-8 overflow-hidden rounded-full bg-white ring-1 ring-white/30">
-                <Image src="/images/iesr-3.jpg" alt="IESR" fill sizes="32px" className="object-cover" />
+              <span className="relative h-9 w-9 overflow-hidden rounded-lg ring-1 ring-white/20">
+                <Image src="/images/iesr-4.jpg" alt="IESR" fill sizes="36px" className="object-cover" />
               </span>
               <span className="text-sm font-semibold text-white">IESR Attendance System</span>
             </div>
