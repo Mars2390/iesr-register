@@ -7,7 +7,7 @@ import { drizzle } from "drizzle-orm/neon-http";
 import { pbkdf2 as _pbkdf2, randomBytes } from "node:crypto";
 import { promisify } from "node:util";
 import * as schema from "../src/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 const pbkdf2 = promisify(_pbkdf2);
 
@@ -41,7 +41,7 @@ interface StudentData {
   name: string;
 }
 
-const CLASS_CONFIG: Record<string, ClassData> = {
+export const CLASS_CONFIG: Record<string, ClassData> = {
   'CEEMAY2025R': {
     code: 'CEEMAY2025R',
     displayName: 'CEEMAY2025R (Craft Electrical)',
@@ -735,32 +735,47 @@ async function migrate() {
   
   console.log(`Found ${allTeachers.size} unique teachers, ${allSubjects.size} unique subjects`);
   
-  // Insert teachers
+  // Timetables have no unique key — clear this school's timetable so a re-run
+  // rebuilds it cleanly instead of duplicating rows.
+  await db.delete(schema.timetables).where(eq(schema.timetables.schoolId, school.id));
+
+  // Teachers: no unique constraint on (school, name), so ON CONFLICT has no
+  // target — look-up-or-insert keeps it idempotent across re-runs.
   const teacherIds = new Map<string, string>();
   for (const [name, { pin }] of allTeachers) {
+    const existing = await db
+      .select({ id: schema.teachers.id })
+      .from(schema.teachers)
+      .where(and(eq(schema.teachers.schoolId, school.id), eq(schema.teachers.name, name)))
+      .limit(1);
+    if (existing[0]) {
+      teacherIds.set(name, existing[0].id);
+      console.log(`  Teacher (exists): ${name}`);
+      continue;
+    }
     const { hash, salt } = await hashPin(pin);
     const [teacher] = await db.insert(schema.teachers).values({
-      schoolId: school.id,
-      name,
-      pinHash: hash,
-      pinSalt: salt,
-      classIds: [],
-      active: true,
-    }).returning();
+      schoolId: school.id, name, pinHash: hash, pinSalt: salt, classIds: [], active: true,
+    }).returning({ id: schema.teachers.id });
     teacherIds.set(name, teacher.id);
     console.log(`  Teacher: ${name} (PIN: ${pin})`);
   }
   
-  // Insert subjects
+  // Subjects: unique(school_id, code). The old 8-char prefix could collide (e.g.
+  // two "ELECTRICAL …" names) — use a collision-free slug code and upsert, so
+  // re-runs and any overlap with seed data are graceful and still return the id.
   const subjectIds = new Map<string, string>();
   for (const subjectName of allSubjects) {
-    const code = subjectName.substring(0, 8).toUpperCase().replace(/[^A-Z0-9]/g, '_');
-    const [subject] = await db.insert(schema.subjects).values({
-      schoolId: school.id,
-      code,
-      name: subjectName,
-      active: true,
-    }).returning();
+    const code =
+      subjectName.toUpperCase().replace(/[^A-Z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 48) || "SUBJECT";
+    const [subject] = await db
+      .insert(schema.subjects)
+      .values({ schoolId: school.id, code, name: subjectName, active: true })
+      .onConflictDoUpdate({
+        target: [schema.subjects.schoolId, schema.subjects.code],
+        set: { name: subjectName, active: true },
+      })
+      .returning({ id: schema.subjects.id });
     subjectIds.set(subjectName, subject.id);
     console.log(`  Subject: ${code} - ${subjectName}`);
   }
@@ -768,24 +783,31 @@ async function migrate() {
   // Insert classes, students, timetable
   for (const [code, data] of Object.entries(CLASS_CONFIG)) {
     // Insert class
-    const [cls] = await db.insert(schema.classes).values({
-      schoolId: school.id,
-      code,
-      displayName: data.displayName,
-      category: data.category || 'Other',
-      active: true,
-    }).returning();
+    const [cls] = await db
+      .insert(schema.classes)
+      .values({
+        schoolId: school.id, code, displayName: data.displayName,
+        category: data.category || "Other", active: true,
+      })
+      .onConflictDoUpdate({
+        target: [schema.classes.schoolId, schema.classes.code],
+        set: { displayName: data.displayName, category: data.category || "Other", active: true },
+      })
+      .returning({ id: schema.classes.id });
     console.log(`\nClass: ${code} - ${data.displayName}`);
     
     // Insert students
     for (const student of data.students) {
-      await db.insert(schema.students).values({
-        schoolId: school.id,
-        admissionNo: student.admissionNo,
-        fullName: student.name,
-        classId: cls.id,
-        active: true,
-      });
+      await db
+        .insert(schema.students)
+        .values({
+          schoolId: school.id, admissionNo: student.admissionNo,
+          fullName: student.name, classId: cls.id, active: true,
+        })
+        .onConflictDoUpdate({
+          target: [schema.students.schoolId, schema.students.admissionNo],
+          set: { fullName: student.name, classId: cls.id, active: true },
+        });
     }
     console.log(`  ${data.students.length} students`);
     
@@ -812,15 +834,20 @@ async function migrate() {
         : session.time.split('-').map(t => t.trim());
       
       const subjectId = subjectIds.get(session.subject) || null;
-      
+
       // Handle lecturers with slashes (e.g., "KIRIGWI/NGANA") - use first lecturer
       const lecturerName = session.lecturer.split('/')[0].trim();
       const teacherId = teacherIds.get(lecturerName) || null;
-      
+
+      // DB CHECK expects lowercase 3-letter days ('mon'..'sun'); CLASS_CONFIG is
+      // uppercase ('MON'). Normalize to satisfy timetables_day_check.
+      const day = session.day.trim().toLowerCase().slice(0, 3) as
+        "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
+
       await db.insert(schema.timetables).values({
         schoolId: school.id,
         classId: cls.id,
-        day: session.day,
+        day,
         startTime,
         endTime,
         subjectId,
@@ -837,4 +864,7 @@ async function migrate() {
   console.log(`   Subjects: ${allSubjects.size}`);
 }
 
-migrate().catch((e) => { console.error(e); process.exit(1); });
+// Only auto-run when invoked directly (not when imported, e.g. by gen-migration-sql.ts).
+if (process.argv[1] && /migrate-real-data\.[tj]s$/.test(process.argv[1])) {
+  migrate().catch((e) => { console.error(e); process.exit(1); });
+}

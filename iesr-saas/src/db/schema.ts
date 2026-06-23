@@ -1,12 +1,14 @@
 // Drizzle schema — mirrors db/schema.sql 1:1. Use `db/schema.sql` as the source
 // of truth for the DB; this file gives type-safe queries + drizzle-kit migrations.
 import {
-  pgTable, pgEnum, uuid, text, boolean, integer, timestamp, jsonb, date, time, unique, index,
+  pgTable, uuid, text, boolean, integer, timestamp, jsonb, date, time, unique, index,
 } from "drizzle-orm/pg-core";
 
-export const attendanceStatus = pgEnum("attendance_status", ["present", "absent", "late", "unmarked"]);
-export const dayOfWeek = pgEnum("day_of_week", ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]);
-export const flagStatus = pgEnum("flag_status", ["open", "acknowledged", "resolved"]);
+// Status/day are TEXT + CHECK in the DB (db/schema.sql). Typed here with $type<>
+// so queries stay type-safe without depending on a Postgres ENUM type.
+type AttendanceStatusValue = "present" | "absent" | "late" | "unmarked";
+type DayValue = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
+type FlagStatusValue = "open" | "acknowledged" | "resolved";
 
 export const schools = pgTable("schools", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -79,7 +81,7 @@ export const timetables = pgTable("timetables", {
   id: uuid("id").primaryKey().defaultRandom(),
   schoolId: uuid("school_id").notNull().references(() => schools.id, { onDelete: "cascade" }),
   classId: uuid("class_id").notNull().references(() => classes.id, { onDelete: "cascade" }),
-  day: dayOfWeek("day").notNull(),
+  day: text("day").$type<DayValue>().notNull(),
   startTime: time("start_time").notNull(),
   endTime: time("end_time").notNull(),
   subjectId: uuid("subject_id").references(() => subjects.id, { onDelete: "set null" }),
@@ -96,7 +98,7 @@ export const attendanceRecords = pgTable("attendance_records", {
   date: date("date").notNull(),
   sessionId: text("session_id").notNull(),
   subjectId: uuid("subject_id").references(() => subjects.id, { onDelete: "set null" }),
-  status: attendanceStatus("status").notNull().default("unmarked"),
+  status: text("status").$type<AttendanceStatusValue>().notNull().default("unmarked"),
   teacherId: uuid("teacher_id").references(() => teachers.id, { onDelete: "set null" }),
   tags: jsonb("tags").notNull().default([]),
   notes: text("notes").notNull().default(""),
@@ -115,7 +117,7 @@ export const flagsIssues = pgTable("flags_issues", {
   classId: uuid("class_id").references(() => classes.id, { onDelete: "set null" }),
   issueType: text("issue_type").notNull(),
   description: text("description").notNull().default(""),
-  status: flagStatus("status").notNull().default("open"),
+  status: text("status").$type<FlagStatusValue>().notNull().default("open"),
   resolved: boolean("resolved").notNull().default(false),
   resolvedAt: timestamp("resolved_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

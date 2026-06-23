@@ -1,9 +1,11 @@
 // Apply a .sql file to the Neon database. Usage: npm run db:setup  (runs db/schema.sql)
 //
-// NOTE: a build/dev-time script, NOT part of the Next.js app. It lives in
-// scripts/ (excluded in tsconfig) so `next build` never type-checks or bundles it.
-// Run via tsx (see package.json). Raw SQL goes through Drizzle's db.execute(sql.raw())
-// on the Neon HTTP driver — correctly typed and one statement per request.
+// Build/dev-time script (scripts/ is excluded in tsconfig, so `next build` never
+// type-checks or bundles it). Run via tsx (see package.json).
+//
+// The schema has NO dollar-quoted ($$) blocks, functions or DO blocks — every
+// statement is a single, simple command — so we just strip full-line comments,
+// split on ';', and send each statement through Neon's HTTP driver one at a time.
 import { neon } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-http";
 import { sql } from "drizzle-orm";
@@ -14,28 +16,26 @@ if (!file) { console.error("usage: tsx scripts/run-sql.ts <file.sql>"); process.
 if (!process.env.DATABASE_URL) { console.error("DATABASE_URL not set"); process.exit(1); }
 
 const db = drizzle(neon(process.env.DATABASE_URL));
-const text = readFileSync(file, "utf8");
 
-// The Neon HTTP driver runs one statement per request, so split on top-level
-// semicolons while preserving dollar-quoted bodies ($$...$$) used by the enum/
-// trigger DO blocks in schema.sql.
-function splitSql(s: string): string[] {
-  const out: string[] = [];
-  let buf = "", inDollar = false;
-  for (let i = 0; i < s.length; i++) {
-    const two = s.slice(i, i + 2);
-    if (two === "$$") { inDollar = !inDollar; buf += two; i++; continue; }
-    const c = s[i];
-    if (c === ";" && !inDollar) { if (buf.trim()) out.push(buf.trim()); buf = ""; }
-    else buf += c;
-  }
-  if (buf.trim()) out.push(buf.trim());
-  return out;
-}
+const statements = readFileSync(file, "utf8")
+  .split("\n")
+  .filter((line) => !/^\s*--/.test(line)) // drop full-line SQL comments
+  .join("\n")
+  .split(";")
+  .map((s) => s.trim())
+  .filter((s) => s.length > 0);
 
 (async () => {
-  const statements = splitSql(text);
   console.log(`Applying ${statements.length} statements from ${file} ...`);
-  for (const stmt of statements) await db.execute(sql.raw(stmt));
-  console.log("Done.");
-})().catch((e) => { console.error(e); process.exit(1); });
+  let n = 0;
+  for (const stmt of statements) {
+    try {
+      await db.execute(sql.raw(stmt));
+      n++;
+    } catch (e) {
+      console.error(`\nFailed on statement #${n + 1}:\n${stmt}\n`);
+      throw e;
+    }
+  }
+  console.log(`Done — ${n} statements applied.`);
+})().catch((e) => { console.error("FAILED:", (e as Error).message ?? e); process.exit(1); });
