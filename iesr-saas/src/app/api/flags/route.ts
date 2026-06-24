@@ -4,6 +4,7 @@ import { flagsIssues, activityLog } from "@/db/schema";
 import { requireTeacher } from "@/lib/auth/guards";
 import { ok, unauthorized, forbidden, badRequest } from "@/lib/api";
 import { teacherOwnsClass, getTeacherFlags } from "@/lib/data/teacher";
+import { SUBMISSION_CODE } from "@/lib/attendance";
 
 export async function GET() {
   const session = await requireTeacher();
@@ -11,13 +12,14 @@ export async function GET() {
   return ok(await getTeacherFlags(session));
 }
 
-interface Body { classId?: unknown; issueType?: unknown; description?: unknown; }
+interface Body { classId?: unknown; issueType?: unknown; description?: unknown; submissionCode?: unknown; }
 
 export async function POST(req: Request) {
   const session = await requireTeacher();
   if (!session) return unauthorized();
 
   const body = (await req.json().catch(() => null)) as Body | null;
+  if (String(body?.submissionCode ?? "") !== SUBMISSION_CODE) return badRequest("invalid_code");
   const issueType = String(body?.issueType ?? "").trim();
   const description = String(body?.description ?? "").trim();
   const classId = body?.classId ? String(body.classId) : null;

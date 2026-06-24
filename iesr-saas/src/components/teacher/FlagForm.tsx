@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { SUBMISSION_CODE } from "@/lib/attendance";
 
 const ISSUE_TYPES = ["Attendance dispute", "Student behaviour", "Timetable conflict", "System issue", "Other"];
 
@@ -19,7 +20,7 @@ export function FlagForm({ classes }: { classes: { id: string; displayName: stri
     try {
       const res = await fetch("/api/flags", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ classId: classId || null, issueType, description: description.trim() }),
+        body: JSON.stringify({ classId: classId || null, issueType, description: description.trim(), submissionCode: SUBMISSION_CODE }),
       });
       const json = await res.json();
       if (!res.ok || !json.ok) throw new Error();

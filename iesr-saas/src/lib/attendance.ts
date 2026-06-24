@@ -16,6 +16,14 @@ import { dayKeyFromDate, normalizeDay, timeToMinutes, formatDate } from "@/lib/d
 export type { AttendanceStatus };
 export { STATUS_TO_LEGACY, STATUS_FROM_LEGACY };
 
+/**
+ * Global submission code. Shown on the teacher toolbar and included in every
+ * write API call (attendance + flags) so the server can verify the request
+ * originated from the official register UI. (Legacy used a per-class hash; the
+ * IESR rollout standardized on a single code.)
+ */
+export const SUBMISSION_CODE = "9209";
+
 export const STATUS_ORDER: AttendanceStatus[] = ["unmarked", "present", "absent", "late"];
 export const STATUS_LABEL: Record<AttendanceStatus, string> = {
   present: "Present", absent: "Absent", late: "Late", unmarked: "—",

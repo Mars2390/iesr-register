@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { formatDateDisplay } from "@/lib/dates";
 
 interface Flag {
@@ -18,8 +18,30 @@ export function FlagsTriage({ initial }: { initial: Flag[] }) {
   const [list, setList] = useState(initial);
   const [tab, setTab] = useState<"open" | "all">("open");
   const [busy, setBusy] = useState<string | null>(null);
+  const [newCount, setNewCount] = useState(0);
+  const knownIds = useRef(new Set(initial.map((f) => f.id)));
 
   const shown = useMemo(() => (tab === "open" ? list.filter((f) => !f.resolved) : list), [list, tab]);
+
+  // Real-time: poll for new/changed flags so teacher-raised issues appear
+  // without a manual page refresh.
+  useEffect(() => {
+    let alive = true;
+    async function poll() {
+      try {
+        const r = await fetch("/api/admin/flags", { cache: "no-store" });
+        const j = await r.json();
+        if (!alive || !r.ok || !j.ok) return;
+        const fresh = j.data as Flag[];
+        const incoming = fresh.filter((f) => !knownIds.current.has(f.id));
+        if (incoming.length) setNewCount((n) => n + incoming.length);
+        fresh.forEach((f) => knownIds.current.add(f.id));
+        setList(fresh);
+      } catch { /* offline — keep showing current list */ }
+    }
+    const t = setInterval(poll, 8000);
+    return () => { alive = false; clearInterval(t); };
+  }, []);
 
   async function setStatus(id: string, status: string) {
     setBusy(id);
@@ -39,7 +61,18 @@ export function FlagsTriage({ initial }: { initial: Flag[] }) {
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold sm:text-3xl">Flags &amp; issues</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold sm:text-3xl">Flags &amp; issues</h1>
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" /> Live
+            </span>
+            {newCount > 0 && (
+              <button onClick={() => setNewCount(0)}
+                className="inline-flex items-center gap-1 rounded-full bg-rose-600 px-2.5 py-0.5 text-[11px] font-bold text-white">
+                {newCount} new · dismiss
+              </button>
+            )}
+          </div>
           <p className="mt-1 text-slate-600">{list.filter((f) => !f.resolved).length} open · {list.length} total</p>
         </div>
         <div className="flex gap-1 rounded-xl bg-slate-100 p-1">

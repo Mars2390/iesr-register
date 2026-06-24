@@ -2,7 +2,7 @@
 // session's schoolId + assigned classIds, so a teacher can only ever read their
 // own classes. Shared by the Server Components (direct call) and the thin
 // /api/teacher/* routes (for client-side fetches).
-import { and, asc, desc, eq, gte, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import {
   classes, students, subjects, teachers, timetables, attendanceRecords, flagsIssues,
@@ -97,6 +97,67 @@ export async function getWeekAttendance(
       inArray(attendanceRecords.date, weekDates),
     ));
   return rows as AttendanceRow[];
+}
+
+/** Attendance rows for an arbitrary [from, to] date range (inclusive). */
+export async function getRangeAttendance(
+  session: SessionPayload, classId: string, from: string, to: string,
+): Promise<AttendanceRow[] | null> {
+  if (!teacherOwnsClass(session, classId)) return null;
+  const rows = await db
+    .select({
+      studentId: attendanceRecords.studentId, date: attendanceRecords.date,
+      sessionId: attendanceRecords.sessionId, status: attendanceRecords.status,
+      subjectId: attendanceRecords.subjectId, teacherId: attendanceRecords.teacherId,
+      tags: attendanceRecords.tags, notes: attendanceRecords.notes,
+    })
+    .from(attendanceRecords)
+    .where(and(
+      eq(attendanceRecords.schoolId, session.schoolId),
+      eq(attendanceRecords.classId, classId),
+      gte(attendanceRecords.date, from),
+      lte(attendanceRecords.date, to),
+    ));
+  return rows as AttendanceRow[];
+}
+
+export interface MomentumRow {
+  studentId: string;
+  present: number;
+  absent: number;
+  late: number;
+  marked: number;
+  firstDate: string | null;
+  lastDate: string | null;
+}
+
+/**
+ * Cumulative per-student attendance momentum from DAY ONE to the latest record.
+ * Never windowed — counts every record ever saved for the class, so the rate is
+ * a continuous lifetime figure that doesn't reset week to week.
+ */
+export async function getStudentMomentum(
+  session: SessionPayload, classId: string,
+): Promise<MomentumRow[] | null> {
+  if (!teacherOwnsClass(session, classId)) return null;
+  const rows = await db
+    .select({
+      studentId: attendanceRecords.studentId,
+      present: sql<number>`count(*) filter (where ${attendanceRecords.status} = 'present')::int`,
+      absent: sql<number>`count(*) filter (where ${attendanceRecords.status} = 'absent')::int`,
+      late: sql<number>`count(*) filter (where ${attendanceRecords.status} = 'late')::int`,
+      marked: sql<number>`count(*) filter (where ${attendanceRecords.status} <> 'unmarked')::int`,
+      firstDate: sql<string | null>`min(${attendanceRecords.date})`,
+      lastDate: sql<string | null>`max(${attendanceRecords.date})`,
+    })
+    .from(attendanceRecords)
+    .where(and(eq(attendanceRecords.schoolId, session.schoolId), eq(attendanceRecords.classId, classId)))
+    .groupBy(attendanceRecords.studentId);
+  return rows.map((r) => ({
+    studentId: r.studentId, present: r.present, absent: r.absent, late: r.late, marked: r.marked,
+    firstDate: r.firstDate ? formatDate(r.firstDate) : null,
+    lastDate: r.lastDate ? formatDate(r.lastDate) : null,
+  }));
 }
 
 /** Per-day summary across the teacher's classes for the last `days` days. */
