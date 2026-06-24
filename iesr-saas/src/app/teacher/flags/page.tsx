@@ -1,5 +1,6 @@
 import { getSession } from "@/lib/auth/session";
 import { getAssignedClasses, getTeacherFlags } from "@/lib/data/teacher";
+import { getSubmissionCode } from "@/lib/data/settings";
 import { FlagForm } from "@/components/teacher/FlagForm";
 import { formatDateDisplay } from "@/lib/dates";
 
@@ -11,7 +12,9 @@ const STATUS_STYLE: Record<string, string> = {
 
 export default async function FlagsPage() {
   const session = (await getSession())!;
-  const [classes, flags] = await Promise.all([getAssignedClasses(session), getTeacherFlags(session)]);
+  const [classes, flags, submissionCode] = await Promise.all([
+    getAssignedClasses(session), getTeacherFlags(session), getSubmissionCode(session.schoolId),
+  ]);
 
   return (
     <div>
@@ -21,7 +24,7 @@ export default async function FlagsPage() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,360px)_1fr]">
-        <FlagForm classes={classes.map((c) => ({ id: c.id, displayName: c.displayName }))} />
+        <FlagForm classes={classes.map((c) => ({ id: c.id, displayName: c.displayName }))} submissionCode={submissionCode} />
 
         <div>
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">Your issues</h2>

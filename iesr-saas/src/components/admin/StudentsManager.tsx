@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 
@@ -79,6 +80,7 @@ export function StudentsManager({ initial, classes }: { initial: StudentRow[]; c
                 <p className="font-mono text-xs text-slate-400">{s.admissionNo}{s.className ? ` · ${s.className}` : " · no class"}</p>
               </div>
               <div className="flex gap-2">
+                <Link href={`/admin/students/${s.id}`} className="btn-outline px-3 py-1.5 text-sm">History</Link>
                 <button onClick={() => openEdit(s)} className="btn-outline px-3 py-1.5 text-sm">Edit</button>
                 <button onClick={() => toggle(s)} className="btn-ghost px-3 py-1.5 text-sm">{s.active ? "Remove" : "Restore"}</button>
               </div>

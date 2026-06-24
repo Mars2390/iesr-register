@@ -6,7 +6,7 @@ import { SUBMISSION_CODE } from "@/lib/attendance";
 
 const ISSUE_TYPES = ["Attendance dispute", "Student behaviour", "Timetable conflict", "System issue", "Other"];
 
-export function FlagForm({ classes }: { classes: { id: string; displayName: string }[] }) {
+export function FlagForm({ classes, submissionCode = SUBMISSION_CODE }: { classes: { id: string; displayName: string }[]; submissionCode?: string }) {
   const router = useRouter();
   const [classId, setClassId] = useState("");
   const [issueType, setIssueType] = useState(ISSUE_TYPES[0]);
@@ -20,7 +20,7 @@ export function FlagForm({ classes }: { classes: { id: string; displayName: stri
     try {
       const res = await fetch("/api/flags", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ classId: classId || null, issueType, description: description.trim(), submissionCode: SUBMISSION_CODE }),
+        body: JSON.stringify({ classId: classId || null, issueType, description: description.trim(), submissionCode }),
       });
       const json = await res.json();
       if (!res.ok || !json.ok) throw new Error();

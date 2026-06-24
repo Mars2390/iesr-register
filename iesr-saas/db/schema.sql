@@ -173,3 +173,16 @@ create table if not exists marking_presence (
   unique (school_id, teacher_id, class_id, date)
 );
 create index if not exists idx_presence_school_seen on marking_presence(school_id, last_seen_at desc);
+
+-- ---------------------------------------------------------------- chat_messages
+create table if not exists chat_messages (
+  id              uuid primary key default gen_random_uuid(),
+  school_id       uuid not null references schools(id) on delete cascade,
+  teacher_id      uuid not null references teachers(id) on delete cascade,
+  sender          text not null check (sender in ('teacher','admin')),
+  body            text not null,
+  read_by_admin   boolean not null default false,
+  read_by_teacher boolean not null default false,
+  created_at      timestamptz not null default now()
+);
+create index if not exists idx_chat_school_teacher on chat_messages(school_id, teacher_id, created_at);

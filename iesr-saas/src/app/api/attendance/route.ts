@@ -7,8 +7,9 @@ import { attendanceRecords, activityLog } from "@/db/schema";
 import { requireTeacher } from "@/lib/auth/guards";
 import { ok, unauthorized, forbidden, badRequest } from "@/lib/api";
 import { teacherOwnsClass, getClassStudents } from "@/lib/data/teacher";
-import { weekToRecords, SUBMISSION_CODE, type WeekAttendance } from "@/lib/attendance";
+import { weekToRecords, type WeekAttendance } from "@/lib/attendance";
 import { validateAttendanceRecords } from "@/lib/validation";
+import { getSubmissionCode } from "@/lib/data/settings";
 import { getWeekDates } from "@/lib/dates";
 
 interface Body { classId?: unknown; weekStart?: unknown; cells?: unknown; submissionCode?: unknown; }
@@ -21,7 +22,7 @@ export async function POST(req: Request) {
   if (!body || typeof body.classId !== "string" || typeof body.weekStart !== "string" || typeof body.cells !== "object" || body.cells === null) {
     return badRequest("invalid_body");
   }
-  if (String(body.submissionCode ?? "") !== SUBMISSION_CODE) return badRequest("invalid_code");
+  if (String(body.submissionCode ?? "") !== (await getSubmissionCode(session.schoolId))) return badRequest("invalid_code");
   const classId = body.classId;
   const weekStart = body.weekStart;
   if (!teacherOwnsClass(session, classId)) return forbidden();

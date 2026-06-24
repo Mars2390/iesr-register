@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
+import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
 const NAV = [
@@ -10,15 +11,30 @@ const NAV = [
   { href: "/admin/students", label: "Students" },
   { href: "/admin/classes", label: "Classes" },
   { href: "/admin/teachers", label: "Teachers" },
+  { href: "/admin/timetable", label: "Timetable" },
+  { href: "/admin/chat", label: "Chat", badge: true },
   { href: "/admin/flags", label: "Flags" },
+  { href: "/admin/notes", label: "Notes" },
   { href: "/admin/reports", label: "Reports" },
   { href: "/admin/activity", label: "Activity" },
+  { href: "/admin/data", label: "Data" },
+  { href: "/admin/settings", label: "Settings" },
 ];
 
-export function AdminHeader({ name }: { name: string }) {
+export function AdminHeader({ name, registerName = "IESR Register", period = "" }: { name: string; registerName?: string; period?: string }) {
   const pathname = usePathname();
   const router = useRouter();
+  const [unread, setUnread] = useState(0);
   const isActive = (href: string, exact?: boolean) => (exact ? pathname === href : pathname.startsWith(href));
+
+  useEffect(() => {
+    let alive = true;
+    const poll = () => fetch("/api/admin/chat?peek=1", { cache: "no-store" }).then((r) => r.json())
+      .then((j) => { if (alive && j.ok) setUnread(j.data.unread); }).catch(() => {});
+    poll();
+    const t = setInterval(poll, 12000);
+    return () => { alive = false; clearInterval(t); };
+  }, [pathname]);
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -33,10 +49,9 @@ export function AdminHeader({ name }: { name: string }) {
           <span className="relative h-8 w-8 overflow-hidden rounded-lg ring-1 ring-white/25">
             <Image src="/images/iesr-4.jpg" alt="IESR" fill sizes="32px" className="object-cover" />
           </span>
-          <span className="font-bold tracking-tight text-white">
-            IESR<span className="text-kplc-yellow">·Register</span>
-          </span>
+          <span className="font-bold tracking-tight text-white">{registerName}</span>
           <span className="hidden rounded-full bg-kplc-yellow px-2 py-0.5 text-xs font-bold text-kplc-navy sm:inline">Admin</span>
+          {period && <span className="hidden rounded-full bg-white/10 px-2 py-0.5 text-xs font-medium text-white/80 lg:inline">{period}</span>}
         </Link>
 
         <nav className="flex min-w-0 items-center gap-1 overflow-x-auto">
@@ -44,13 +59,16 @@ export function AdminHeader({ name }: { name: string }) {
             <Link
               key={n.href}
               href={n.href}
-              className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+              className={`relative whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
                 isActive(n.href, n.exact)
                   ? "bg-white/15 text-white"
                   : "text-white/70 hover:bg-white/10 hover:text-white"
               }`}
             >
               {n.label}
+              {n.badge && unread > 0 && (
+                <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">{unread}</span>
+              )}
             </Link>
           ))}
         </nav>

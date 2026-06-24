@@ -293,7 +293,10 @@ export function weekToRecords(
   const out: AttendanceUpsert[] = [];
   for (const [key, cell] of Object.entries(week)) {
     if (!cell || !cell.status) continue;
-    if (!includeUnmarked && cell.status === "unmarked") continue;
+    // Keep an unmarked cell if it carries a note or tags — otherwise a teacher's
+    // note on a not-yet-marked student would be silently dropped (the old bug).
+    const hasMeta = !!(cell.notes && cell.notes.trim()) || (Array.isArray(cell.tags) && cell.tags.length > 0);
+    if (!includeUnmarked && cell.status === "unmarked" && !hasMeta) continue;
     const parsed = parseAttendanceKey(key);
     if (!parsed) continue;
     if (weekDates && !weekDates.includes(parsed.date)) continue;

@@ -1,10 +1,10 @@
 // Server-side data layer for the admin area. Everything is scoped to
 // session.schoolId (admins see the whole school). Reads only — writes live in
 // the /api/admin/* route handlers.
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import {
-  classes, students, teachers, admins, subjects, attendanceRecords, flagsIssues, activityLog, markingPresence,
+  classes, students, teachers, admins, subjects, timetables, attendanceRecords, flagsIssues, activityLog, markingPresence,
 } from "@/db/schema";
 import type { SessionPayload } from "@/lib/auth/session";
 import { formatDate } from "@/lib/dates";
@@ -107,6 +107,93 @@ export async function listFlags(session: SessionPayload) {
     .where(eq(flagsIssues.schoolId, session.schoolId))
     .orderBy(flagsIssues.resolved, desc(flagsIssues.createdAt)) // open first, newest first
     .limit(200);
+}
+
+/** All attendance notes/tags across the school (teacher-entered during marking). */
+export async function listNotes(
+  session: SessionPayload, opts: { classId?: string; studentId?: string; limit?: number } = {},
+) {
+  const where = [
+    eq(attendanceRecords.schoolId, session.schoolId),
+    sql`(btrim(${attendanceRecords.notes}) <> '' OR jsonb_array_length(${attendanceRecords.tags}) > 0)`,
+  ];
+  if (opts.classId) where.push(eq(attendanceRecords.classId, opts.classId));
+  if (opts.studentId) where.push(eq(attendanceRecords.studentId, opts.studentId));
+  return db.select({
+    id: attendanceRecords.id, date: attendanceRecords.date, status: attendanceRecords.status,
+    notes: attendanceRecords.notes, tags: attendanceRecords.tags,
+    studentId: attendanceRecords.studentId, studentName: students.fullName, admissionNo: students.admissionNo,
+    classId: attendanceRecords.classId, className: classes.displayName,
+    subject: subjects.name, teacherName: teachers.name,
+  })
+    .from(attendanceRecords)
+    .leftJoin(students, eq(students.id, attendanceRecords.studentId))
+    .leftJoin(classes, eq(classes.id, attendanceRecords.classId))
+    .leftJoin(subjects, eq(subjects.id, attendanceRecords.subjectId))
+    .leftJoin(teachers, eq(teachers.id, attendanceRecords.teacherId))
+    .where(and(...where))
+    .orderBy(desc(attendanceRecords.date), desc(attendanceRecords.updatedAt))
+    .limit(opts.limit ?? 300);
+}
+
+/** Single student header (with class). Null if not in this school. */
+export async function getStudentDetail(session: SessionPayload, studentId: string) {
+  const [row] = await db.select({
+    id: students.id, admissionNo: students.admissionNo, fullName: students.fullName,
+    classId: students.classId, className: classes.displayName, classCode: classes.code, active: students.active,
+  })
+    .from(students)
+    .leftJoin(classes, eq(classes.id, students.classId))
+    .where(and(eq(students.id, studentId), eq(students.schoolId, session.schoolId)))
+    .limit(1);
+  return row ?? null;
+}
+
+/** Single teacher header (name + assigned classes). Null if not in this school. */
+export async function getTeacherDetail(session: SessionPayload, teacherId: string) {
+  const [row] = await db.select({
+    id: teachers.id, name: teachers.name, classIds: teachers.classIds, active: teachers.active,
+    createdAt: teachers.createdAt,
+  })
+    .from(teachers)
+    .where(and(eq(teachers.id, teacherId), eq(teachers.schoolId, session.schoolId)))
+    .limit(1);
+  if (!row) return null;
+  const cls = row.classIds.length
+    ? await db.select({ id: classes.id, displayName: classes.displayName, code: classes.code })
+        .from(classes).where(and(eq(classes.schoolId, session.schoolId), inArray(classes.id, row.classIds)))
+    : [];
+  return { ...row, classes: cls };
+}
+
+const DAY_ORDER: Record<string, number> = { mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6, sun: 7 };
+
+/** Whole-school timetable, joined to class/subject/teacher names. */
+export async function listTimetable(session: SessionPayload) {
+  const rows = await db.select({
+    id: timetables.id,
+    classId: timetables.classId, className: classes.displayName, classCode: classes.code,
+    day: timetables.day, startTime: timetables.startTime, endTime: timetables.endTime,
+    subjectId: timetables.subjectId, subjectName: subjects.name,
+    teacherId: timetables.teacherId, teacherName: teachers.name,
+  })
+    .from(timetables)
+    .leftJoin(classes, eq(classes.id, timetables.classId))
+    .leftJoin(subjects, eq(subjects.id, timetables.subjectId))
+    .leftJoin(teachers, eq(teachers.id, timetables.teacherId))
+    .where(eq(timetables.schoolId, session.schoolId));
+  return rows.sort((a, b) =>
+    (a.className ?? "").localeCompare(b.className ?? "") ||
+    (DAY_ORDER[a.day] ?? 9) - (DAY_ORDER[b.day] ?? 9) ||
+    a.startTime.localeCompare(b.startTime));
+}
+
+/** Subjects (optionally per class) for the timetable form. */
+export async function listSubjects(session: SessionPayload) {
+  return db.select({ id: subjects.id, code: subjects.code, name: subjects.name, classId: subjects.classId, active: subjects.active })
+    .from(subjects)
+    .where(eq(subjects.schoolId, session.schoolId))
+    .orderBy(subjects.name);
 }
 
 export async function listActivity(session: SessionPayload, limit = 100) {

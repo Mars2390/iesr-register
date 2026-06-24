@@ -3,6 +3,7 @@
 // Pure functions over normalized rows. EXACT legacy math preserved: a "present"
 // session = present OR late; rate = round(present / total * 100).
 import type { AttendanceStatus } from "@/types";
+import { dayKeyFromDate, type DayKey } from "@/lib/dates";
 
 export interface AnalyticsRow {
   admNo: string;
@@ -193,4 +194,142 @@ export function computeProblematic(rows: AnalyticsRow[], minMissed = 3): Problem
 /** Status band shared by UI + PDF. */
 export function statusBand(percentage: number): "Good" | "Warning" | "Critical" {
   return percentage >= 80 ? "Good" : percentage >= 60 ? "Warning" : "Critical";
+}
+
+/* ================================================================== *
+ * Dashboard analytics (Section 1) — subject/day/teacher/risk blocks.  *
+ * All reuse the same legacy math: present = present|late.             *
+ * ================================================================== */
+
+/* ----------------------------------------------------- subject (lesson) stats */
+export interface SubjectStat { subject: string; teacher: string; attended: number; total: number; rate: number; }
+
+/** Per-subject attendance — powers "most/least attended lessons". */
+export function computeSubjectStats(rows: AnalyticsRow[]): SubjectStat[] {
+  const agg: Record<string, { subject: string; attended: number; total: number; teachers: Record<string, number> }> = {};
+  for (const r of rows) {
+    const name = r.subject?.trim();
+    if (!name) continue;
+    const s = (agg[name] ??= { subject: name, attended: 0, total: 0, teachers: {} });
+    s.total++;
+    if (present(r.status)) s.attended++;
+    if (r.teacher) s.teachers[r.teacher] = (s.teachers[r.teacher] ?? 0) + 1;
+  }
+  return Object.values(agg)
+    .map((s) => ({
+      subject: s.subject, attended: s.attended, total: s.total, rate: pct(s.attended, s.total),
+      teacher: Object.entries(s.teachers).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "—",
+    }))
+    .sort((a, b) => b.rate - a.rate || b.total - a.total);
+}
+
+/** Top-N most and least attended lessons (min sessions to avoid noise). */
+export function topAndBottomSubjects(rows: AnalyticsRow[], n = 5, minSessions = 3) {
+  const stats = computeSubjectStats(rows).filter((s) => s.total >= minSessions);
+  return { most: stats.slice(0, n), least: stats.slice().reverse().slice(0, n) };
+}
+
+/* ----------------------------------------------------- day-of-week pattern */
+export interface DayStat { day: DayKey; label: string; attended: number; total: number; rate: number; }
+const DAY_LABEL: Record<DayKey, string> = { mon: "Monday", tue: "Tuesday", wed: "Wednesday", thu: "Thursday", fri: "Friday", sat: "Saturday", sun: "Sunday" };
+const WEEK_ORDER: DayKey[] = ["mon", "tue", "wed", "thu", "fri"];
+
+/** Mon–Fri attendance pattern + an auto-generated insight string. */
+export function computeDayPattern(rows: AnalyticsRow[]): { days: DayStat[]; insight: string | null } {
+  const agg: Record<string, { attended: number; total: number }> = {};
+  for (const r of rows) {
+    const k = dayKeyFromDate(r.date);
+    const d = (agg[k] ??= { attended: 0, total: 0 });
+    d.total++; if (present(r.status)) d.attended++;
+  }
+  const days: DayStat[] = WEEK_ORDER.map((day) => {
+    const d = agg[day] ?? { attended: 0, total: 0 };
+    return { day, label: DAY_LABEL[day], attended: d.attended, total: d.total, rate: pct(d.attended, d.total) };
+  });
+  const withData = days.filter((d) => d.total > 0);
+  let insight: string | null = null;
+  if (withData.length >= 2) {
+    const avg = Math.round(withData.reduce((s, d) => s + d.rate, 0) / withData.length);
+    const worst = withData.slice().sort((a, b) => a.rate - b.rate)[0];
+    const gap = avg - worst.rate;
+    if (gap >= 5) insight = `${worst.label}s have ${gap}% lower attendance than the weekly average (${avg}%).`;
+  }
+  return { days, insight };
+}
+
+/* ----------------------------------------------------- teacher marking consistency */
+export interface TeacherConsistency { teacher: string; marks: number; sessions: number; present: number; rate: number; lastMarked: string | null; }
+
+/** Per-teacher marking volume + the present-rate they record. */
+export function computeTeacherConsistency(rows: AnalyticsRow[]): TeacherConsistency[] {
+  const agg: Record<string, { teacher: string; marks: number; present: number; sessions: Set<string>; last: string }> = {};
+  for (const r of rows) {
+    if (!r.teacher) continue;
+    const t = (agg[r.teacher] ??= { teacher: r.teacher, marks: 0, present: 0, sessions: new Set(), last: "" });
+    t.marks++; if (present(r.status)) t.present++;
+    t.sessions.add(`${r.date}|${r.classCode}|${r.subject}`);
+    if (r.date > t.last) t.last = r.date;
+  }
+  return Object.values(agg)
+    .map((t) => ({ teacher: t.teacher, marks: t.marks, sessions: t.sessions.size, present: t.present, rate: pct(t.present, t.marks), lastMarked: t.last || null }))
+    .sort((a, b) => b.sessions - a.sessions || b.marks - a.marks);
+}
+
+/* ----------------------------------------------------- per-student analytics */
+export interface StudentAnalytics {
+  admNo: string; name: string; classCode: string;
+  present: number; absent: number; late: number; total: number; rate: number;
+  band: "Good" | "Warning" | "Critical";
+  mostMissed: string | null; mostAttended: string | null;
+}
+
+/** Full per-student roster with most-missed / most-attended subject. */
+export function computeStudentAnalytics(rows: AnalyticsRow[]): StudentAnalytics[] {
+  const agg: Record<string, {
+    name: string; classCode: string; present: number; absent: number; late: number; total: number;
+    subj: Record<string, { attended: number; absent: number }>;
+  }> = {};
+  for (const r of rows) {
+    const s = (agg[r.admNo] ??= { name: r.name || r.admNo, classCode: r.classCode, present: 0, absent: 0, late: 0, total: 0, subj: {} });
+    s.total++;
+    if (r.status === "present") s.present++;
+    else if (r.status === "late") { s.late++; s.present++; }
+    else if (r.status === "absent") s.absent++;
+    const name = r.subject?.trim();
+    if (name) {
+      const sj = (s.subj[name] ??= { attended: 0, absent: 0 });
+      if (present(r.status)) sj.attended++; else if (r.status === "absent") sj.absent++;
+    }
+  }
+  return Object.entries(agg).map(([admNo, s]) => {
+    const rate = pct(s.present, s.total);
+    const subjArr = Object.entries(s.subj);
+    const mostMissed = subjArr.filter(([, v]) => v.absent > 0).sort((a, b) => b[1].absent - a[1].absent)[0]?.[0] ?? null;
+    const mostAttended = subjArr.slice().sort((a, b) => b[1].attended - a[1].attended)[0]?.[0] ?? null;
+    return {
+      admNo, name: s.name, classCode: s.classCode,
+      present: s.present, absent: s.absent, late: s.late, total: s.total, rate,
+      band: statusBand(rate), mostMissed, mostAttended,
+    };
+  }).sort((a, b) => a.rate - b.rate);
+}
+
+/* ----------------------------------------------------- risk distribution + percentiles */
+export interface RiskBands { critical: number; warning: number; good: number; atRisk: number; total: number; }
+
+export function computeRiskBands(students: StudentAnalytics[]): RiskBands {
+  let critical = 0, warning = 0, good = 0;
+  for (const s of students) {
+    if (s.band === "Critical") critical++;
+    else if (s.band === "Warning") warning++;
+    else good++;
+  }
+  return { critical, warning, good, atRisk: critical, total: students.length };
+}
+
+/** Bottom/top decile (Section 7 system flags). Needs ≥3 marked sessions to qualify. */
+export function computePercentiles(students: StudentAnalytics[]) {
+  const ranked = students.filter((s) => s.total >= 3).sort((a, b) => a.rate - b.rate);
+  const k = Math.max(1, Math.ceil(ranked.length * 0.1));
+  return { lowest: ranked.slice(0, k), highest: ranked.slice(-k).reverse() };
 }

@@ -23,6 +23,7 @@ interface Props {
   initialWeekStart: string;
   initialDayIndex: number;
   initialCells: WeekAttendance;
+  submissionCode?: string;
 }
 
 type Msg = { type: "success" | "error"; text: string } | null;
@@ -60,6 +61,7 @@ const lecturerMatches = (a: string, b: string) => {
 
 export function MarkingGrid({
   classInfo, teacherName, teacherId, students, timetable, initialWeekStart, initialDayIndex, initialCells,
+  submissionCode = SUBMISSION_CODE,
 }: Props) {
   const [weekStart, setWeekStart] = useState(initialWeekStart);
   const [cells, setCells] = useState<WeekAttendance>(initialCells);
@@ -226,7 +228,7 @@ export function MarkingGrid({
     try {
       const res = await fetch("/api/attendance", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ classId: classInfo.id, weekStart, cells, submissionCode: SUBMISSION_CODE }),
+        body: JSON.stringify({ classId: classInfo.id, weekStart, cells, submissionCode }),
       });
       const json = await res.json();
       if (!res.ok || !json.ok) throw new Error(json.error || "save_failed");
@@ -355,7 +357,7 @@ export function MarkingGrid({
         `${flagNote.trim() ? `: ${flagNote.trim()}` : ""} · ${classInfo.code} · ${activeDate}`;
       const res = await fetch("/api/flags", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ classId: classInfo.id, issueType: "Student behaviour", description, submissionCode: SUBMISSION_CODE }),
+        body: JSON.stringify({ classId: classInfo.id, issueType: "Student behaviour", description, submissionCode }),
       });
       const json = await res.json();
       if (!res.ok || !json.ok) throw new Error();
@@ -472,7 +474,7 @@ export function MarkingGrid({
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-2">
           <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">
-            🔑 Submission Code: {SUBMISSION_CODE}
+            🔑 Submission Code: {submissionCode}
           </span>
           <button onClick={() => setModal("tags")} className="btn-muted">Behavior Tags</button>
           <button onClick={openMomentum} className="btn-muted">Attendance Momentum</button>
@@ -771,7 +773,7 @@ export function MarkingGrid({
                   );
                 })}
               </div>
-              <p className="mt-3 text-xs text-slate-400">Tags save with the register when you press Update Register (the student must have a status marked that day).</p>
+              <p className="mt-3 text-xs text-slate-400">Tags &amp; notes save with the register when you press Update Register — even if the student isn&apos;t marked present/absent yet.</p>
             </div>
           )}
         </Modal>

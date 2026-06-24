@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 
@@ -79,6 +80,7 @@ export function TeachersManager({ initial, classes }: { initial: TeacherRow[]; c
                 </p>
               </div>
               <div className="flex gap-2">
+                <Link href={`/admin/teachers/${t.id}`} className="btn-outline px-3 py-1.5 text-sm">Compliance</Link>
                 <button onClick={() => openEdit(t)} className="btn-outline px-3 py-1.5 text-sm">Edit</button>
                 <button onClick={() => toggle(t)} className="btn-ghost px-3 py-1.5 text-sm">{t.active ? "Deactivate" : "Reactivate"}</button>
               </div>

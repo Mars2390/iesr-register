@@ -2,17 +2,29 @@
 
 import Link from "next/link";
 import Image from "next/image";
+import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
 const NAV = [
   { href: "/teacher", label: "Classes", exact: true },
   { href: "/teacher/history", label: "History" },
+  { href: "/teacher/chat", label: "Messages", badge: true },
   { href: "/teacher/flags", label: "Flags" },
 ];
 
 export function TeacherHeader({ name }: { name: string }) {
   const pathname = usePathname();
   const router = useRouter();
+  const [unread, setUnread] = useState(0);
+
+  useEffect(() => {
+    let alive = true;
+    const poll = () => fetch("/api/chat?peek=1", { cache: "no-store" }).then((r) => r.json())
+      .then((j) => { if (alive && j.ok) setUnread(j.data.unread); }).catch(() => {});
+    poll();
+    const t = setInterval(poll, 12000);
+    return () => { alive = false; clearInterval(t); };
+  }, [pathname]);
 
   const isActive = (href: string, exact?: boolean) =>
     exact ? pathname === href : pathname.startsWith(href);
@@ -43,13 +55,16 @@ export function TeacherHeader({ name }: { name: string }) {
             <Link
               key={n.href}
               href={n.href}
-              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+              className={`relative rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
                 isActive(n.href, n.exact)
                   ? "bg-white/15 text-white"
                   : "text-white/70 hover:bg-white/10 hover:text-white"
               }`}
             >
               {n.label}
+              {n.badge && unread > 0 && (
+                <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">{unread}</span>
+              )}
             </Link>
           ))}
         </nav>

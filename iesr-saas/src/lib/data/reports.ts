@@ -12,6 +12,7 @@ export interface ReportFilters {
   to?: string;
   classId?: string;
   teacherId?: string;  // attendance teacher
+  studentId?: string;  // single-student drill-down
 }
 
 export async function getAnalyticsRows(session: SessionPayload, f: ReportFilters): Promise<AnalyticsRow[]> {
@@ -20,6 +21,7 @@ export async function getAnalyticsRows(session: SessionPayload, f: ReportFilters
   if (f.to) where.push(lte(attendanceRecords.date, f.to));
   if (f.classId) where.push(eq(attendanceRecords.classId, f.classId));
   if (f.teacherId) where.push(eq(attendanceRecords.teacherId, f.teacherId));
+  if (f.studentId) where.push(eq(attendanceRecords.studentId, f.studentId));
 
   const rows = await db
     .select({

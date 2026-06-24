@@ -9,6 +9,7 @@ import {
 type AttendanceStatusValue = "present" | "absent" | "late" | "unmarked";
 type DayValue = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 type FlagStatusValue = "open" | "acknowledged" | "resolved";
+type ChatSenderValue = "teacher" | "admin";
 
 export const schools = pgTable("schools", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -134,6 +135,19 @@ export const activityLog = pgTable("activity_log", {
   meta: jsonb("meta").notNull().default({}),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({ byRecent: index("idx_activity_school_recent").on(t.schoolId, t.createdAt) }));
+
+// Teacher ↔ admin direct messaging. One conversation per teacher (the admin is
+// the other party in this single-school system). Separate from flags_issues.
+export const chatMessages = pgTable("chat_messages", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  schoolId: uuid("school_id").notNull().references(() => schools.id, { onDelete: "cascade" }),
+  teacherId: uuid("teacher_id").notNull().references(() => teachers.id, { onDelete: "cascade" }),
+  sender: text("sender").$type<ChatSenderValue>().notNull(),
+  body: text("body").notNull(),
+  readByAdmin: boolean("read_by_admin").notNull().default(false),
+  readByTeacher: boolean("read_by_teacher").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({ byThread: index("idx_chat_school_teacher").on(t.schoolId, t.teacherId, t.createdAt) }));
 
 export const markingPresence = pgTable("marking_presence", {
   id: uuid("id").primaryKey().defaultRandom(),
