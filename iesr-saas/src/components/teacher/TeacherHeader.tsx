@@ -5,10 +5,12 @@ import Image from "next/image";
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
-const NAV = [
+type NavItem = { href: string; label: string; exact?: boolean; badge?: "private" | "group" };
+const NAV: NavItem[] = [
   { href: "/teacher", label: "Classes", exact: true },
   { href: "/teacher/history", label: "History" },
-  { href: "/teacher/chat", label: "Messages", badge: true },
+  { href: "/teacher/chat", label: "Chat", badge: "private" },
+  { href: "/teacher/school-chat", label: "School Chat", badge: "group" },
   { href: "/teacher/flags", label: "Flags" },
 ];
 
@@ -16,13 +18,21 @@ export function TeacherHeader({ name, registerName = "IESR Register" }: { name: 
   const pathname = usePathname();
   const router = useRouter();
   const [unread, setUnread] = useState(0);
+  const [unreadGroup, setUnreadGroup] = useState(0);
 
   useEffect(() => {
     let alive = true;
-    const poll = () => fetch("/api/chat?peek=1", { cache: "no-store" }).then((r) => r.json())
-      .then((j) => { if (alive && j.ok) setUnread(j.data.unread); }).catch(() => {});
+    const poll = async () => {
+      try {
+        const r1 = await fetch("/api/chat?peek=1", { cache: "no-store" }).then((r) => r.json());
+        if (alive && r1.ok) setUnread(r1.data.unread);
+        const since = (() => { try { return localStorage.getItem("iesr_group_lastseen") ?? "1"; } catch { return "1"; } })();
+        const r2 = await fetch(`/api/chat/group?peek=${encodeURIComponent(since)}`, { cache: "no-store" }).then((r) => r.json());
+        if (alive && r2.ok) setUnreadGroup(r2.data.unread);
+      } catch { /* offline */ }
+    };
     poll();
-    const t = setInterval(poll, 12000);
+    const t = setInterval(poll, 8000);
     return () => { alive = false; clearInterval(t); };
   }, [pathname]);
 
@@ -60,8 +70,8 @@ export function TeacherHeader({ name, registerName = "IESR Register" }: { name: 
               }`}
             >
               {n.label}
-              {n.badge && unread > 0 && (
-                <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">{unread}</span>
+              {((n.badge === "private" && unread > 0) || (n.badge === "group" && unreadGroup > 0)) && (
+                <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">{n.badge === "private" ? unread : unreadGroup}</span>
               )}
             </Link>
           ))}

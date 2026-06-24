@@ -17,7 +17,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       {/* premium branded backdrop — fixed photo with a light wash so it reads as a
           subtle textured background while keeping all text crisp on top. */}
       <div aria-hidden className="pointer-events-none fixed inset-0 z-0">
-        <Image src="/images/iesr-11.jpg" alt="" fill priority sizes="100vw" className="object-cover" />
+        <Image src="/images/iesr-1.jpg" alt="" fill priority sizes="100vw" className="object-cover" />
         {/* light wash: lets ~25% of the photo show, keeps luminance high for dark text */}
         <div className="absolute inset-0 bg-gradient-to-b from-slate-50/82 via-slate-50/74 to-slate-100/88" />
         {/* brand depth: soft navy glow at the top, faint yellow warmth bottom-right */}

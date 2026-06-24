@@ -136,6 +136,19 @@ export const activityLog = pgTable("activity_log", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({ byRecent: index("idx_activity_school_recent").on(t.schoolId, t.createdAt) }));
 
+// School-wide group chat (one room for the whole school — like WhatsApp). Every
+// teacher + the admin post into the same room. sender_id is a teacher.id OR
+// admin.id, so it has no single FK; sender_name/role are denormalized for display.
+export const groupChatMessages = pgTable("group_chat_messages", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  schoolId: uuid("school_id").notNull().references(() => schools.id, { onDelete: "cascade" }),
+  senderId: uuid("sender_id").notNull(),
+  senderName: text("sender_name").notNull(),
+  senderRole: text("sender_role").$type<ChatSenderValue>().notNull(),
+  message: text("message").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({ bySchool: index("idx_group_chat_school").on(t.schoolId, t.createdAt) }));
+
 // Teacher ↔ admin direct messaging. One conversation per teacher (the admin is
 // the other party in this single-school system). Separate from flags_issues.
 export const chatMessages = pgTable("chat_messages", {
