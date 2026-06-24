@@ -23,24 +23,31 @@ export async function sendMessage(schoolId: string, teacherId: string, sender: C
 
 /* ----------------------------------------------------------------- teacher side */
 
-/** Teacher's own thread. Marks admin replies as read. */
+/** Teacher's own thread. Marks admin replies as read. Never throws to the page. */
 export async function getTeacherThread(session: SessionPayload): Promise<ChatMessage[]> {
-  await db.update(chatMessages)
-    .set({ readByTeacher: true })
-    .where(and(eq(chatMessages.schoolId, session.schoolId), eq(chatMessages.teacherId, session.sub),
-      eq(chatMessages.sender, "admin"), eq(chatMessages.readByTeacher, false)));
-  const rows = await db.select({ id: chatMessages.id, sender: chatMessages.sender, body: chatMessages.body, createdAt: chatMessages.createdAt })
-    .from(chatMessages)
-    .where(and(eq(chatMessages.schoolId, session.schoolId), eq(chatMessages.teacherId, session.sub)))
-    .orderBy(asc(chatMessages.createdAt));
-  return rows.map((r) => ({ ...r, createdAt: iso(r.createdAt) }));
+  try {
+    await db.update(chatMessages)
+      .set({ readByTeacher: true })
+      .where(and(eq(chatMessages.schoolId, session.schoolId), eq(chatMessages.teacherId, session.sub),
+        eq(chatMessages.sender, "admin"), eq(chatMessages.readByTeacher, false)));
+    const rows = await db.select({ id: chatMessages.id, sender: chatMessages.sender, body: chatMessages.body, createdAt: chatMessages.createdAt })
+      .from(chatMessages)
+      .where(and(eq(chatMessages.schoolId, session.schoolId), eq(chatMessages.teacherId, session.sub)))
+      .orderBy(asc(chatMessages.createdAt));
+    return rows.map((r) => ({ ...r, createdAt: iso(r.createdAt) }));
+  } catch (e) {
+    console.error("getTeacherThread failed:", (e as Error).message);
+    return [];
+  }
 }
 
 export async function getTeacherUnread(session: SessionPayload): Promise<number> {
-  const [r] = await db.select({ n: sql<number>`count(*)::int` }).from(chatMessages)
-    .where(and(eq(chatMessages.schoolId, session.schoolId), eq(chatMessages.teacherId, session.sub),
-      eq(chatMessages.sender, "admin"), eq(chatMessages.readByTeacher, false)));
-  return r?.n ?? 0;
+  try {
+    const [r] = await db.select({ n: sql<number>`count(*)::int` }).from(chatMessages)
+      .where(and(eq(chatMessages.schoolId, session.schoolId), eq(chatMessages.teacherId, session.sub),
+        eq(chatMessages.sender, "admin"), eq(chatMessages.readByTeacher, false)));
+    return r?.n ?? 0;
+  } catch { return 0; }
 }
 
 /* ----------------------------------------------------------------- admin side */
@@ -52,6 +59,7 @@ export interface Conversation {
 
 /** All teachers as conversations (even with no messages yet), newest activity first. */
 export async function listConversations(session: SessionPayload): Promise<Conversation[]> {
+  try {
   const [tchs, agg, recent] = await Promise.all([
     db.select({ id: teachers.id, name: teachers.name, active: teachers.active })
       .from(teachers).where(eq(teachers.schoolId, session.schoolId)).orderBy(asc(teachers.name)),
@@ -79,25 +87,36 @@ export async function listConversations(session: SessionPayload): Promise<Conver
       unread: a?.unread ?? 0, total: a?.total ?? 0,
     };
   }).sort((x, y) => (y.lastAt ?? "").localeCompare(x.lastAt ?? ""));
+  } catch (e) {
+    console.error("listConversations failed:", (e as Error).message);
+    return [];
+  }
 }
 
-/** One teacher's thread (admin view). Marks teacher messages as read. */
+/** One teacher's thread (admin view). Marks teacher messages as read. Never throws. */
 export async function getAdminThread(session: SessionPayload, teacherId: string): Promise<ChatMessage[]> {
-  await db.update(chatMessages)
-    .set({ readByAdmin: true })
-    .where(and(eq(chatMessages.schoolId, session.schoolId), eq(chatMessages.teacherId, teacherId),
-      eq(chatMessages.sender, "teacher"), eq(chatMessages.readByAdmin, false)));
-  const rows = await db.select({ id: chatMessages.id, sender: chatMessages.sender, body: chatMessages.body, createdAt: chatMessages.createdAt })
-    .from(chatMessages)
-    .where(and(eq(chatMessages.schoolId, session.schoolId), eq(chatMessages.teacherId, teacherId)))
-    .orderBy(asc(chatMessages.createdAt));
-  return rows.map((r) => ({ ...r, createdAt: iso(r.createdAt) }));
+  try {
+    await db.update(chatMessages)
+      .set({ readByAdmin: true })
+      .where(and(eq(chatMessages.schoolId, session.schoolId), eq(chatMessages.teacherId, teacherId),
+        eq(chatMessages.sender, "teacher"), eq(chatMessages.readByAdmin, false)));
+    const rows = await db.select({ id: chatMessages.id, sender: chatMessages.sender, body: chatMessages.body, createdAt: chatMessages.createdAt })
+      .from(chatMessages)
+      .where(and(eq(chatMessages.schoolId, session.schoolId), eq(chatMessages.teacherId, teacherId)))
+      .orderBy(asc(chatMessages.createdAt));
+    return rows.map((r) => ({ ...r, createdAt: iso(r.createdAt) }));
+  } catch (e) {
+    console.error("getAdminThread failed:", (e as Error).message);
+    return [];
+  }
 }
 
 export async function getAdminUnread(session: SessionPayload): Promise<number> {
-  const [r] = await db.select({ n: sql<number>`count(*)::int` }).from(chatMessages)
-    .where(and(eq(chatMessages.schoolId, session.schoolId), eq(chatMessages.sender, "teacher"), eq(chatMessages.readByAdmin, false)));
-  return r?.n ?? 0;
+  try {
+    const [r] = await db.select({ n: sql<number>`count(*)::int` }).from(chatMessages)
+      .where(and(eq(chatMessages.schoolId, session.schoolId), eq(chatMessages.sender, "teacher"), eq(chatMessages.readByAdmin, false)));
+    return r?.n ?? 0;
+  } catch { return 0; }
 }
 
 /** Validate a teacher belongs to this school (admin sending to a teacher). */
