@@ -163,6 +163,7 @@ export function MarkingGrid({
   }
 
   function clearDay() {
+    if (!confirm(`Clear all marks for ${WEEKDAY_LABELS[dayIndex]} ${dm(weekDates[dayIndex])} in the grid? (Press Update Register to persist.)`)) return;
     const dateStr = weekDates[dayIndex];
     const sessions = daySessions[dayIndex];
     setCells((prev) => {
@@ -224,6 +225,7 @@ export function MarkingGrid({
   function goToday() { jumpToDate(formatDate(new Date())); }
 
   async function submit(label = "Register updated") {
+    if (!confirm(`Submit this week's register to the cloud? (${summary.markedLessons} marked entries will be saved.)`)) return;
     setSaving(true); setMessage(null);
     try {
       const res = await fetch("/api/attendance", {
@@ -374,6 +376,7 @@ export function MarkingGrid({
   function runExport(label: string, from: string, to: string) {
     if (!from || !to) { setMessage({ type: "error", text: "Pick both a start and end date." }); return; }
     if (from > to) { setMessage({ type: "error", text: "Start date must be on or before the end date." }); return; }
+    if (!confirm(`Export the ${label} attendance CSV (${from} → ${to})?`)) return;
     const qs = new URLSearchParams({ classId: classInfo.id, from, to, label });
     const a = document.createElement("a");
     a.href = `/api/teacher/export?${qs.toString()}`;
@@ -479,7 +482,7 @@ export function MarkingGrid({
           <button onClick={() => setModal("tags")} className="btn-muted">Behavior Tags</button>
           <button onClick={openMomentum} className="btn-muted">Attendance Momentum</button>
           <button onClick={() => setModal("export")} className="btn-muted">Export CSV ▾</button>
-          <button onClick={() => window.print()} className="btn-muted">Print</button>
+          <button onClick={() => { if (confirm("Open the print dialog for this register?")) window.print(); }} className="btn-muted">Print</button>
           <div className="ml-auto flex items-center gap-2">
             <button onClick={() => submit("Week saved")} disabled={saving || !dirty} className="btn-muted disabled:opacity-50">Save Week</button>
             <button onClick={() => submit("Register updated")} disabled={saving || !dirty} className="btn-primary px-5 py-2 text-sm">

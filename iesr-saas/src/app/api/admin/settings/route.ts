@@ -30,6 +30,11 @@ export async function PATCH(req: Request) {
     if (!CODE_RE.test(code)) return badRequest("invalid_code_format"); // 3–12 alphanumerics
     patch.submissionCode = code;
   }
+  if (typeof b.adminPin === "string") {
+    const pin = b.adminPin.trim();
+    if (!CODE_RE.test(pin)) return badRequest("invalid_pin_format"); // 3–12 alphanumerics
+    patch.adminPin = pin;
+  }
   if (patch.schoolName === "") return badRequest("school_name_required");
   if (!Object.keys(patch).length) return badRequest("nothing_to_update");
 

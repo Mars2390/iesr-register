@@ -8,6 +8,10 @@ import type { SessionPayload } from "@/lib/auth/session";
 export type ChatSender = "teacher" | "admin";
 export interface ChatMessage { id: string; sender: ChatSender; body: string; createdAt: string; }
 
+// The Neon HTTP driver returns timestamptz columns as ISO strings, not Date
+// objects — so never call Date methods on them directly.
+const iso = (v: unknown): string => (v instanceof Date ? v.toISOString() : String(v ?? ""));
+
 /** Insert a message; the sender's own side is marked read immediately. */
 export async function sendMessage(schoolId: string, teacherId: string, sender: ChatSender, body: string) {
   const [row] = await db.insert(chatMessages).values({
@@ -29,7 +33,7 @@ export async function getTeacherThread(session: SessionPayload): Promise<ChatMes
     .from(chatMessages)
     .where(and(eq(chatMessages.schoolId, session.schoolId), eq(chatMessages.teacherId, session.sub)))
     .orderBy(asc(chatMessages.createdAt));
-  return rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() }));
+  return rows.map((r) => ({ ...r, createdAt: iso(r.createdAt) }));
 }
 
 export async function getTeacherUnread(session: SessionPayload): Promise<number> {
@@ -71,7 +75,7 @@ export async function listConversations(session: SessionPayload): Promise<Conver
     return {
       teacherId: t.id, teacherName: t.name, active: t.active,
       lastBody: lastBody.get(t.id) ?? null,
-      lastAt: a?.lastAt ? new Date(a.lastAt).toISOString() : null,
+      lastAt: a?.lastAt ? iso(a.lastAt) : null,
       unread: a?.unread ?? 0, total: a?.total ?? 0,
     };
   }).sort((x, y) => (y.lastAt ?? "").localeCompare(x.lastAt ?? ""));
@@ -87,7 +91,7 @@ export async function getAdminThread(session: SessionPayload, teacherId: string)
     .from(chatMessages)
     .where(and(eq(chatMessages.schoolId, session.schoolId), eq(chatMessages.teacherId, teacherId)))
     .orderBy(asc(chatMessages.createdAt));
-  return rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() }));
+  return rows.map((r) => ({ ...r, createdAt: iso(r.createdAt) }));
 }
 
 export async function getAdminUnread(session: SessionPayload): Promise<number> {

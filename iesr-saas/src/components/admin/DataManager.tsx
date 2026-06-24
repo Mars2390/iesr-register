@@ -9,24 +9,58 @@ export function DataManager() {
     <div className="mx-auto max-w-3xl space-y-6">
       <div>
         <h1 className="text-2xl font-bold sm:text-3xl">Data management</h1>
-        <p className="mt-1 text-slate-600">Back up, import, reset for a new term, or clear attendance. Roster is always preserved unless you import over it.</p>
+        <p className="mt-1 text-slate-600">Back up, import, or start a fresh term. Your roster (students, teachers, classes, timetable) is always preserved.</p>
       </div>
 
-      <ArchiveCard />
+      <FreshStartCard />
       <ImportCard />
-      <ResetTermCard />
       <ClearCard />
     </div>
   );
 }
 
-/* ----------------------------------------------------------------- archive */
-function ArchiveCard() {
+/* ----------------------------------------------------------------- fresh start */
+function FreshStartCard() {
+  const [term, setTerm] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  async function run() {
+    if (confirm !== "RESET") return;
+    if (!window.confirm("FRESH START: this permanently deletes ALL attendance records (roster is kept). Did you download the archive? Continue?")) return;
+    setBusy(true); setMsg(null);
+    try {
+      const r = await fetch("/api/admin/data", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reset_term", confirm: "RESET", term: term || undefined }),
+      });
+      const j = await r.json();
+      setMsg(r.ok && j.ok ? `✅ Fresh term started — ${j.data.deleted} records cleared.` : "Reset failed.");
+      if (r.ok && j.ok) setConfirm("");
+    } finally { setBusy(false); }
+  }
+
   return (
-    <section className="card p-5">
-      <h2 className="font-semibold text-kplc-navy">Archive / backup</h2>
-      <p className="mt-1 text-sm text-slate-500">Download a full JSON snapshot (roster + all attendance) before resetting a term.</p>
-      <a href="/api/admin/data/archive" className="btn-primary mt-3 inline-flex">⬇ Download archive (.json)</a>
+    <section className="card border-2 border-kplc-navy/15 p-5">
+      <div className="flex items-center gap-2">
+        <span className="grid h-8 w-8 place-items-center rounded-lg bg-kplc-navy text-white">↻</span>
+        <h2 className="text-lg font-bold text-kplc-navy">Fresh Start — new term</h2>
+      </div>
+      <p className="mt-2 text-sm text-slate-500">Wipes every attendance record for a clean term while keeping all students, teachers, classes and the timetable. <b>Download an archive first</b> — this cannot be undone.</p>
+
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <a href="/api/admin/data/archive" className="btn-outline">⬇ 1. Download archive (.json)</a>
+      </div>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <Field label="New term name (optional)"><input className="input" value={term} onChange={(e) => setTerm(e.target.value)} placeholder="e.g. Term 2 2025" /></Field>
+        <Field label='2. Type "RESET" to confirm'><input className="input font-mono tracking-widest" value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="RESET" /></Field>
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <button onClick={run} disabled={busy || confirm !== "RESET"} className="btn bg-kplc-navy text-white hover:bg-kplc-blue disabled:opacity-50">{busy ? "Starting…" : "3. Start fresh term"}</button>
+        {msg && <span className="text-sm font-medium text-slate-600">{msg}</span>}
+      </div>
     </section>
   );
 }
@@ -62,6 +96,7 @@ function ImportCard() {
 
   async function submit() {
     if (!parsed) return;
+    if (!window.confirm(`Import ${parsed.length} students? Existing admission numbers will be updated.`)) return;
     setBusy(true); setResult(null);
     try {
       const r = await fetch("/api/admin/data", {
@@ -99,49 +134,7 @@ function ImportCard() {
   );
 }
 
-/* ----------------------------------------------------------------- reset term */
-function ResetTermCard() {
-  const [term, setTerm] = useState("");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
-  const [confirm, setConfirm] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
-
-  async function run() {
-    if (confirm !== "RESET") return;
-    if (!window.confirm("This permanently deletes attendance records for the selected range. Continue?")) return;
-    setBusy(true); setMsg(null);
-    try {
-      const r = await fetch("/api/admin/data", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "reset_term", confirm: "RESET", term: term || undefined, from: from || undefined, to: to || undefined }),
-      });
-      const j = await r.json();
-      setMsg(r.ok && j.ok ? `Reset complete — ${j.data.deleted} records deleted.` : "Reset failed.");
-      if (r.ok && j.ok) setConfirm("");
-    } finally { setBusy(false); }
-  }
-
-  return (
-    <section className="card border-amber-200 p-5">
-      <h2 className="font-semibold text-amber-700">Reset for a new term</h2>
-      <p className="mt-1 text-sm text-slate-500">Deletes attendance (optionally within a date range) and keeps the roster &amp; timetable. Set the new term name to update it everywhere.</p>
-      <div className="mt-3 grid gap-3 sm:grid-cols-3">
-        <Field label="New term (optional)"><input className="input" value={term} onChange={(e) => setTerm(e.target.value)} placeholder="Term 2" /></Field>
-        <Field label="From (optional)"><input type="date" className="input" value={from} onChange={(e) => setFrom(e.target.value)} /></Field>
-        <Field label="To (optional)"><input type="date" className="input" value={to} onChange={(e) => setTo(e.target.value)} /></Field>
-      </div>
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <input className="input w-40" placeholder='Type "RESET"' value={confirm} onChange={(e) => setConfirm(e.target.value)} />
-        <button onClick={run} disabled={busy || confirm !== "RESET"} className="btn bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50">{busy ? "Resetting…" : "Reset term"}</button>
-        {msg && <span className="text-sm font-medium text-slate-600">{msg}</span>}
-      </div>
-    </section>
-  );
-}
-
-/* ----------------------------------------------------------------- clear all */
+/* ----------------------------------------------------------------- clear all (secondary) */
 function ClearCard() {
   const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState(false);
@@ -164,8 +157,8 @@ function ClearCard() {
 
   return (
     <section className="card border-rose-200 p-5">
-      <h2 className="font-semibold text-rose-700">Clear all attendance data</h2>
-      <p className="mt-1 text-sm text-slate-500">Irreversibly removes every attendance record (and live presence). Students, teachers, classes and timetable are kept. Archive first.</p>
+      <h2 className="font-semibold text-rose-700">Clear all attendance (no term change)</h2>
+      <p className="mt-1 text-sm text-slate-500">Same as Fresh Start but without setting a new term name. Roster preserved. Archive first.</p>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <input className="input w-40" placeholder='Type "DELETE"' value={confirm} onChange={(e) => setConfirm(e.target.value)} />
         <button onClick={run} disabled={busy || confirm !== "DELETE"} className="btn bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-50">{busy ? "Clearing…" : "Clear all data"}</button>

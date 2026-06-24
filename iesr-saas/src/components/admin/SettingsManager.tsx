@@ -25,7 +25,7 @@ export function SettingsManager({ initial }: { initial: SchoolSettings }) {
       router.refresh();
     } catch (err) {
       const code = err instanceof Error ? err.message : "";
-      setMsg({ type: "error", text: code === "invalid_code_format" ? "Submission code must be 3–12 letters/numbers." : "Couldn't save settings." });
+      setMsg({ type: "error", text: code === "invalid_code_format" ? "Submission code must be 3–12 letters/numbers." : code === "invalid_pin_format" ? "Admin PIN must be 3–12 letters/numbers." : "Couldn't save settings." });
     } finally { setSaving(false); }
   }
 
@@ -63,6 +63,15 @@ export function SettingsManager({ initial }: { initial: SchoolSettings }) {
           <Field label="Code (3–12 letters/numbers)">
             <input className="input font-mono text-lg tracking-widest" value={form.submissionCode}
               onChange={(e) => setForm({ ...form, submissionCode: e.target.value })} maxLength={12} required />
+          </Field>
+        </section>
+
+        <section className="card border-kplc-navy/20 p-5">
+          <h2 className="mb-1 font-semibold text-kplc-navy">Administrator PIN</h2>
+          <p className="mb-4 text-sm text-slate-500">Required to access the admin area. Change it here anytime — applies on next sign-in.</p>
+          <Field label="Admin PIN (3–12 letters/numbers)">
+            <input className="input font-mono text-lg tracking-widest" value={form.adminPin}
+              onChange={(e) => setForm({ ...form, adminPin: e.target.value })} maxLength={12} required />
           </Field>
         </section>
 

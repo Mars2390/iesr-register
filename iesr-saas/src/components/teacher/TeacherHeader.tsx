@@ -12,7 +12,7 @@ const NAV = [
   { href: "/teacher/flags", label: "Flags" },
 ];
 
-export function TeacherHeader({ name }: { name: string }) {
+export function TeacherHeader({ name, registerName = "IESR Register" }: { name: string; registerName?: string }) {
   const pathname = usePathname();
   const router = useRouter();
   const [unread, setUnread] = useState(0);
@@ -42,9 +42,7 @@ export function TeacherHeader({ name }: { name: string }) {
           <span className="relative h-8 w-8 overflow-hidden rounded-lg ring-1 ring-white/25">
             <Image src="/images/iesr-4.jpg" alt="IESR" fill sizes="32px" className="object-cover" />
           </span>
-          <span className="font-bold tracking-tight text-white">
-            IESR<span className="text-kplc-yellow">·Register</span>
-          </span>
+          <span className="font-bold tracking-tight text-white">{registerName}</span>
           <span className="hidden rounded-full bg-kplc-yellow px-2 py-0.5 text-xs font-bold text-kplc-navy sm:inline">
             Teacher
           </span>

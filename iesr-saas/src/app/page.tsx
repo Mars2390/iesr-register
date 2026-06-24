@@ -3,7 +3,10 @@ import Image from "next/image";
 import { Navbar } from "@/components/landing/Navbar";
 import { Hero } from "@/components/landing/Hero";
 import { Reveal } from "@/components/landing/Reveal";
-import { Counter } from "@/components/landing/Counter";
+import { LiveStats } from "@/components/landing/LiveStats";
+import { getPublicStats } from "@/lib/data/public";
+
+export const dynamic = "force-dynamic"; // real, live stats every request
 
 /* ------------------------------------------------------------ icons */
 type I = { className?: string };
@@ -47,7 +50,8 @@ const TESTIMONIALS = [
   { img: "/images/iesr-9.jpeg", quote: "Seeing who is marking, live, changed how we run the day. Issues get flagged and resolved before they grow.", who: "Department Lead", role: "Institute of Energy Studies & Research" },
 ];
 
-export default function LandingPage() {
+export default async function LandingPage() {
+  const stats = await getPublicStats();
   return (
     <div className="overflow-x-hidden bg-white">
       <Navbar />
@@ -71,19 +75,10 @@ export default function LandingPage() {
         <Image src="/images/iesr-14.jpg" alt="" fill sizes="100vw" className="object-cover" />
         <div className="absolute inset-0 bg-kplc-navy/90" />
         <div className="container-page relative py-16 sm:py-20">
-          <div className="grid grid-cols-2 gap-8 text-center text-white lg:grid-cols-4">
-            {[
-              { to: 4, suffix: "", label: "Attendance statuses" },
-              { to: 5, suffix: "s", label: "Live refresh" },
-              { to: 100, suffix: "%", label: "Cloud-backed" },
-              { to: 24, suffix: "/7", label: "Always available" },
-            ].map((s) => (
-              <Reveal key={s.label}>
-                <Counter to={s.to} suffix={s.suffix} className="font-display text-5xl font-bold text-kplc-yellow sm:text-6xl" />
-                <p className="mt-2 text-sm font-medium uppercase tracking-wide text-white/70">{s.label}</p>
-              </Reveal>
-            ))}
-          </div>
+          <Reveal>
+            <p className="mb-8 text-center text-xs font-bold uppercase tracking-[0.2em] text-kplc-yellow/80">Live from the register</p>
+            <LiveStats initial={stats} />
+          </Reveal>
         </div>
       </section>
 

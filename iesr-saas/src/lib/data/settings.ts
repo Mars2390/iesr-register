@@ -13,7 +13,11 @@ export interface SchoolSettings {
   academicYear: string;
   term: string;
   submissionCode: string;
+  adminPin: string;
 }
+
+/** Default administrator PIN if none has been set in Settings yet. */
+export const DEFAULT_ADMIN_PIN = "2003";
 
 const str = (v: unknown, fallback: string) => (typeof v === "string" && v.trim() ? v : fallback);
 
@@ -27,6 +31,7 @@ export async function getSchoolSettings(schoolId: string): Promise<SchoolSetting
     academicYear: typeof s.academicYear === "string" ? s.academicYear : "",
     term: typeof s.term === "string" ? s.term : "",
     submissionCode: str(s.submissionCode, SUBMISSION_CODE),
+    adminPin: str(s.adminPin, DEFAULT_ADMIN_PIN),
   };
 }
 
@@ -35,8 +40,13 @@ export async function getSubmissionCode(schoolId: string): Promise<string> {
   return (await getSchoolSettings(schoolId)).submissionCode;
 }
 
+/** Administrator PIN for a school (fallback to the default 2003). */
+export async function getAdminPin(schoolId: string): Promise<string> {
+  return (await getSchoolSettings(schoolId)).adminPin;
+}
+
 export interface SettingsPatch {
-  schoolName?: string; registerName?: string; academicYear?: string; term?: string; submissionCode?: string;
+  schoolName?: string; registerName?: string; academicYear?: string; term?: string; submissionCode?: string; adminPin?: string;
 }
 
 export async function updateSchoolSettings(schoolId: string, patch: SettingsPatch): Promise<void> {
@@ -47,6 +57,7 @@ export async function updateSchoolSettings(schoolId: string, patch: SettingsPatc
   if (patch.academicYear !== undefined) next.academicYear = patch.academicYear;
   if (patch.term !== undefined) next.term = patch.term;
   if (patch.submissionCode !== undefined) next.submissionCode = patch.submissionCode;
+  if (patch.adminPin !== undefined) next.adminPin = patch.adminPin;
 
   const set: Record<string, unknown> = { settings: next, updatedAt: new Date() };
   if (patch.schoolName !== undefined) set.name = patch.schoolName;

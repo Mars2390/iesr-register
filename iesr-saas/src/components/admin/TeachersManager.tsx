@@ -93,9 +93,13 @@ export function TeachersManager({ initial, classes }: { initial: TeacherRow[]; c
         <form onSubmit={save} className="space-y-4">
           <div><label className="mb-1 block text-sm font-medium text-slate-700">Name</label>
             <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required /></div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">PIN {editing && <span className="font-normal text-slate-400">(leave blank to keep current)</span>}</label>
-            <input className="input" inputMode="numeric" value={form.pin} onChange={(e) => setForm({ ...form, pin: e.target.value })} placeholder={editing ? "••••" : "e.g. 4810"} />
+          <div className={editing ? "rounded-xl border border-slate-200 bg-slate-50 p-3" : ""}>
+            <label className="mb-1 block text-sm font-medium text-slate-700">
+              {editing ? "Change PIN" : "PIN"} {editing && <span className="font-normal text-slate-400">(leave blank to keep current)</span>}
+            </label>
+            <input className="input" inputMode="numeric" type="password" autoComplete="off" value={form.pin}
+              onChange={(e) => setForm({ ...form, pin: e.target.value })} placeholder={editing ? "Enter a new PIN…" : "e.g. 4810"} />
+            {editing && <p className="mt-1 text-xs text-slate-400">Sets a new sign-in PIN for {form.name || "this teacher"} immediately.</p>}
           </div>
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700">Assigned classes</label>
