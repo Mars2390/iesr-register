@@ -471,9 +471,9 @@ export function MarkingGrid({
           </label>
           <div className="mx-1 h-7 w-px bg-slate-200" />
           <button onClick={markAllPresentForActiveDay}
-            className="rounded-lg bg-kplc-green px-3.5 py-2 text-sm font-bold text-white shadow-sm hover:brightness-95">✓ Mark All Present</button>
-          <button onClick={clearDay} className="rounded-lg bg-rose-500 px-3 py-2 text-sm font-semibold text-white hover:bg-rose-600">Clear Day</button>
-          <button onClick={clearWeek} className="rounded-lg bg-rose-600 px-3 py-2 text-sm font-semibold text-white hover:bg-rose-700">Clear Week</button>
+            className="rounded-lg bg-emerald-600 px-3.5 py-2 text-sm font-bold text-white shadow-sm hover:bg-emerald-700">✓ Mark All Present</button>
+          <button onClick={clearDay} className="rounded-lg border border-rose-200 bg-white px-3 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-50">Clear Day</button>
+          <button onClick={clearWeek} className="rounded-lg border border-rose-200 bg-white px-3 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-50">Clear Week</button>
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-2">
           <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">
@@ -494,10 +494,10 @@ export function MarkingGrid({
 
       {/* ===== Live summary totals — update instantly as you mark ===== */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <Totals label="Present" value={summary.present} day={dayTotals.present} cls="from-emerald-500 to-emerald-600" />
-        <Totals label="Absent" value={summary.absent} day={dayTotals.absent} cls="from-rose-500 to-rose-600" />
-        <Totals label="Late" value={summary.late} day={dayTotals.late} cls="from-amber-400 to-amber-500" />
-        <Totals label="Unmarked" value={summary.unmarked} day={dayTotals.unmarked} cls="from-slate-400 to-slate-500" />
+        <Totals label="Present" value={summary.present} day={dayTotals.present} cls="from-emerald-600 to-emerald-700" />
+        <Totals label="Absent" value={summary.absent} day={dayTotals.absent} cls="from-rose-600 to-rose-700" />
+        <Totals label="Late" value={summary.late} day={dayTotals.late} cls="from-amber-400 to-amber-500" dark />
+        <Totals label="Unmarked" value={summary.unmarked} day={dayTotals.unmarked} cls="from-slate-500 to-slate-600" />
       </div>
 
       {/* ===== Continuous tally — per-day breakdown ===== */}
@@ -850,12 +850,15 @@ const TONE: Record<string, string> = {
   rose: "border-rose-200 bg-rose-50 text-rose-800",
 };
 
-function Totals({ label, value, day, cls }: { label: string; value: number; day: number; cls: string }) {
+function Totals({ label, value, day, cls, dark = false }: { label: string; value: number; day: number; cls: string; dark?: boolean }) {
+  // `dark` = readable text for the light amber "Late" card (white-on-amber fails contrast).
+  const main = dark ? "text-amber-950" : "text-white";
+  const sub = dark ? "text-amber-900/80" : "text-white/80";
   return (
-    <div className={`rounded-2xl bg-gradient-to-br ${cls} px-4 py-3 text-white shadow-soft`}>
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-white/80">{label}</p>
+    <div className={`rounded-2xl bg-gradient-to-br ${cls} px-4 py-3 ${main} shadow-soft`}>
+      <p className={`text-[11px] font-semibold uppercase tracking-wide ${sub}`}>{label}</p>
       <p className="text-2xl font-extrabold leading-none">{value}</p>
-      <p className="mt-0.5 text-[11px] text-white/80">today: {day}</p>
+      <p className={`mt-0.5 text-[11px] ${sub}`}>today: {day}</p>
     </div>
   );
 }
