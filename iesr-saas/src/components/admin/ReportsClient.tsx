@@ -135,31 +135,69 @@ export function ReportsClient({ options, initial, from, to }: { options: Options
 
       {/* exports */}
       <section>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">Export</h2>
-        <div className="card space-y-4 p-5">
-          <div>
-            <p className="mb-2 text-sm font-medium text-slate-600">CSV</p>
-            <div className="flex flex-wrap gap-2">
-              <a href={href("csv", "weekly", ranges.weekly)} className="btn-outline px-3 py-1.5 text-sm">Weekly</a>
-              <a href={href("csv", "monthly", ranges.monthly)} className="btn-outline px-3 py-1.5 text-sm">Monthly</a>
-              <a href={href("csv", "termly", ranges.termly)} className="btn-outline px-3 py-1.5 text-sm">Termly</a>
-              <a href={href("csv", "class")} className="btn-outline px-3 py-1.5 text-sm">Class comparison</a>
-              <a href={href("csv", "problematic")} className="btn-outline px-3 py-1.5 text-sm">Problematic</a>
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">Export reports</h2>
+
+        {/* flagship leadership brief */}
+        <div className="card mb-4 overflow-hidden">
+          <div className="bg-gradient-to-r from-kplc-navy to-kplc-blue p-5 text-white">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-kplc-yellow/90">For the Dean · HOA · HOD</p>
+            <h3 className="mt-1 text-lg font-bold">Leadership brief</h3>
+            <p className="mt-1 text-sm text-white/80">School-wide rate, class ranking (with charts), top/bottom units, students needing attention, top performers, 80% policy, chronic-absence watchlist, teacher compliance &amp; month trend — one document.</p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <a href={href("zip", "all")} className="btn bg-kplc-yellow px-4 py-2 text-sm font-bold text-kplc-navy hover:brightness-95">⬇ Download everything (ZIP)</a>
+              <a href={href("pdf", "leadership")} className="btn bg-white/15 px-4 py-2 text-sm font-semibold text-white ring-1 ring-white/25 hover:bg-white/25">📄 Brief (PDF + charts)</a>
+              <a href={href("xlsx", "leadership")} className="btn bg-white/15 px-4 py-2 text-sm font-semibold text-white ring-1 ring-white/25 hover:bg-white/25">📊 Excel workbook</a>
+              <a href={href("csv", "leadership")} className="btn bg-white/15 px-4 py-2 text-sm font-semibold text-white ring-1 ring-white/25 hover:bg-white/25">CSV</a>
             </div>
+            <p className="mt-2 text-xs text-white/60">The ZIP bundles the brief, all Excel workbooks, register grid, policy, watchlist &amp; certificates — one dated pack.</p>
           </div>
-          <div>
-            <p className="mb-2 text-sm font-medium text-slate-600">PDF</p>
-            <div className="flex flex-wrap gap-2">
-              <a href={href("pdf", "hoa")} className="btn-primary px-3 py-1.5 text-sm">HOD report</a>
-              <a href={href("pdf", "problematic")} className="btn-primary px-3 py-1.5 text-sm">Problematic</a>
-              {filters.teacherId ? (
-                <a href={href("pdf", "momentum")} className="btn-primary px-3 py-1.5 text-sm">Teacher momentum</a>
-              ) : (
-                <span className="btn-primary pointer-events-none px-3 py-1.5 text-sm opacity-40" title="Select a teacher first">Teacher momentum</span>
-              )}
-            </div>
-            {!filters.teacherId && <p className="mt-2 text-xs text-slate-400">Select a teacher in the filters to enable the momentum PDF.</p>}
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="card p-5">
+            <p className="text-sm font-semibold text-slate-700">Period summaries</p>
+            <p className="mb-3 text-xs text-slate-500">Grouped by class · per-student totals · class &amp; school totals.</p>
+            <ExportRow label="Weekly" href={href} type="weekly" range={ranges.weekly} formats={["csv", "xlsx"]} />
+            <ExportRow label="Monthly" href={href} type="monthly" range={ranges.monthly} formats={["csv", "xlsx"]} />
+            <ExportRow label="Termly" href={href} type="termly" range={ranges.termly} formats={["csv", "xlsx"]} />
           </div>
+
+          <div className="card p-5">
+            <p className="text-sm font-semibold text-slate-700">Register &amp; certificates</p>
+            <p className="mb-3 text-xs text-slate-500">The on-screen register + signable certificates.</p>
+            <ExportRow label="Weekly register grid (P/A/L)" href={href} type="grid" range={ranges.weekly} formats={["csv", "xlsx"]} />
+            <ExportRow label="Attendance certificates" href={href} type="certificates" formats={["pdf"]} />
+          </div>
+
+          <div className="card p-5">
+            <p className="text-sm font-semibold text-slate-700">Compliance &amp; risk</p>
+            <p className="mb-3 text-xs text-slate-500">Policy pass/fail &amp; chronic-absence detection.</p>
+            <ExportRow label={`80% policy pass / fail`} href={href} type="policy" formats={["csv", "xlsx"]} />
+            <ExportRow label="Chronic absentee watchlist" href={href} type="chronic" formats={["csv", "xlsx"]} />
+            <ExportRow label="Problematic students (3+ missed)" href={href} type="problematic" formats={["csv", "pdf"]} />
+          </div>
+
+          <div className="card p-5">
+            <p className="text-sm font-semibold text-slate-700">Detailed data</p>
+            <p className="mb-3 text-xs text-slate-500">Uses the From/To range above.</p>
+            <ExportRow label="Full data (student × unit)" href={href} type="full" formats={["csv", "xlsx"]} />
+            <ExportRow label="Teacher performance (with units)" href={href} type="teachers" formats={["csv", "xlsx"]} />
+            <ExportRow label="Class comparison" href={href} type="class" formats={["csv"]} />
+          </div>
+        </div>
+
+        {/* PDFs */}
+        <div className="card mt-4 p-5">
+          <p className="mb-3 text-sm font-semibold text-slate-700">Other PDFs</p>
+          <div className="flex flex-wrap gap-2">
+            <a href={href("pdf", "hoa")} className="btn-primary px-3 py-1.5 text-sm">HOD overview</a>
+            {filters.teacherId ? (
+              <a href={href("pdf", "momentum")} className="btn-primary px-3 py-1.5 text-sm">Teacher momentum</a>
+            ) : (
+              <span className="btn-primary pointer-events-none px-3 py-1.5 text-sm opacity-40" title="Select a teacher first">Teacher momentum</span>
+            )}
+          </div>
+          {!filters.teacherId && <p className="mt-2 text-xs text-slate-400">Select a teacher in the filters to enable the momentum PDF. Filter by class to scope certificates to one class.</p>}
         </div>
       </section>
     </div>
@@ -168,6 +206,30 @@ export function ReportsClient({ options, initial, from, to }: { options: Options
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return <div><label className="mb-1 block text-xs font-medium text-slate-500">{label}</label>{children}</div>;
+}
+
+const FMT_STYLE: Record<string, string> = {
+  csv: "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50",
+  xlsx: "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100",
+  pdf: "border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100",
+};
+function ExportRow({
+  label, href, type, range, formats,
+}: {
+  label: string;
+  href: (format: string, type: string, range?: { from: string; to: string }) => string;
+  type: string; range?: { from: string; to: string }; formats: string[];
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 border-t border-slate-100 py-2 first:border-t-0">
+      <span className="min-w-0 truncate text-sm text-slate-600">{label}</span>
+      <span className="flex shrink-0 gap-1.5">
+        {formats.map((f) => (
+          <a key={f} href={href(f, type, range)} className={`rounded-lg border px-2.5 py-1 text-xs font-semibold uppercase transition-colors ${FMT_STYLE[f] ?? FMT_STYLE.csv}`}>{f}</a>
+        ))}
+      </span>
+    </div>
+  );
 }
 function Tile({ label, value, accent }: { label: string; value: string | number; accent?: "navy" | "emerald" | "rose" | "amber" }) {
   const c = accent ? { navy: "text-kplc-navy bg-kplc-navy/5", emerald: "text-emerald-700 bg-emerald-50", rose: "text-rose-700 bg-rose-50", amber: "text-amber-700 bg-amber-50" }[accent] : "text-slate-900 bg-white border border-slate-200";

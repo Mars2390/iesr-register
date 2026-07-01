@@ -10,8 +10,11 @@ export interface AnalyticsRow {
   name: string;
   classId: string;
   classCode: string;
+  classDisplayName: string; // human class name for section headers
+  classCategory: string;    // e.g. "Diploma Electrical" — groups classes
   date: string;        // YYYY-MM-DD
   weekStart: string;   // ISO Monday
+  sessionId: string;   // per-day session key (for register-grid columns)
   status: AttendanceStatus;
   teacher: string;
   subject: string;
@@ -332,4 +335,402 @@ export function computePercentiles(students: StudentAnalytics[]) {
   const ranked = students.filter((s) => s.total >= 3).sort((a, b) => a.rate - b.rate);
   const k = Math.max(1, Math.ceil(ranked.length * 0.1));
   return { lowest: ranked.slice(0, k), highest: ranked.slice(-k).reverse() };
+}
+
+/* ================================================================== *
+ * LEADERSHIP REPORTS (Dean / HOA / HOD)                              *
+ * Class-grouped summaries, per-subject matrices, teacher performance *
+ * and a school-wide leadership brief. Same math: present = P|L.      *
+ * ================================================================== */
+
+/** Natural sort for admission numbers ("ADM2" < "ADM10") and mixed codes. */
+const natCmp = (a: string, b: string) =>
+  a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+
+/* ------------------------------------------------- class-grouped summary */
+export interface StudentLine {
+  admNo: string; name: string; present: number; absent: number; late: number; unmarked: number; total: number; rate: number;
+}
+export interface ClassGroup {
+  classCode: string; displayName: string; category: string;
+  students: StudentLine[];
+  present: number; absent: number; late: number; unmarked: number; total: number; rate: number;
+  studentCount: number;
+}
+export interface GroupedSummary {
+  classes: ClassGroup[];
+  overall: { present: number; absent: number; late: number; unmarked: number; total: number; rate: number; students: number; classes: number };
+}
+
+/**
+ * Group attendance by CLASS first (never random), each class sorted by student
+ * name, with per-class totals and a school-wide total. Powers Weekly / Monthly /
+ * Termly exports so leadership sees clean, categorized sections.
+ */
+export function computeGroupedSummary(rows: AnalyticsRow[]): GroupedSummary {
+  const classMap: Record<string, {
+    classCode: string; displayName: string; category: string;
+    students: Record<string, StudentLine>;
+  }> = {};
+
+  for (const r of rows) {
+    const cm = (classMap[r.classCode] ??= { classCode: r.classCode, displayName: r.classDisplayName, category: r.classCategory, students: {} });
+    const s = (cm.students[r.admNo] ??= { admNo: r.admNo, name: r.name, present: 0, absent: 0, late: 0, unmarked: 0, total: 0, rate: 0 });
+    s.total++;
+    if (r.status === "present") s.present++;
+    else if (r.status === "late") s.late++;
+    else if (r.status === "absent") s.absent++;
+    else s.unmarked++;
+  }
+
+  const classes: ClassGroup[] = Object.values(classMap).map((cm) => {
+    const students = Object.values(cm.students)
+      .map((s) => ({ ...s, rate: pct(s.present + s.late, s.present + s.late + s.absent) }))
+      .sort((a, b) => natCmp(a.name, b.name));
+    const agg = students.reduce((o, s) => {
+      o.present += s.present; o.absent += s.absent; o.late += s.late; o.unmarked += s.unmarked; o.total += s.total; return o;
+    }, { present: 0, absent: 0, late: 0, unmarked: 0, total: 0 });
+    const marked = agg.present + agg.late + agg.absent;
+    return { classCode: cm.classCode, displayName: cm.displayName, category: cm.category, students, ...agg, rate: pct(agg.present + agg.late, marked), studentCount: students.length };
+  })
+    // order by category, then class code — categorized, deterministic (never random)
+    .sort((a, b) => natCmp(a.category, b.category) || natCmp(a.classCode, b.classCode));
+
+  const o = classes.reduce((acc, c) => {
+    acc.present += c.present; acc.absent += c.absent; acc.late += c.late; acc.unmarked += c.unmarked; acc.total += c.total; acc.students += c.studentCount; return acc;
+  }, { present: 0, absent: 0, late: 0, unmarked: 0, total: 0, students: 0 });
+  const oMarked = o.present + o.late + o.absent;
+
+  return { classes, overall: { ...o, rate: pct(o.present + o.late, oMarked), classes: classes.length } };
+}
+
+/* ------------------------------------------------- per-student × subject matrix */
+export interface StudentSubjectLine { subject: string; teacher: string; attended: number; total: number; rate: number; }
+export interface StudentSubjectBlock {
+  admNo: string; name: string; classCode: string; classDisplayName: string; category: string;
+  subjects: StudentSubjectLine[];
+  attended: number; total: number; rate: number;
+}
+export interface FullDataMatrix {
+  classes: Array<{ classCode: string; displayName: string; category: string; students: StudentSubjectBlock[] }>;
+  studentCount: number;
+}
+
+/**
+ * "How many lessons you attended across every unit you study." Per student,
+ * per subject: attended / total lessons + rate, plus the student's overall.
+ * Grouped by class → categorized, no confusion. Powers the Full Data export.
+ */
+export function computeFullDataMatrix(rows: AnalyticsRow[]): FullDataMatrix {
+  const students: Record<string, {
+    admNo: string; name: string; classCode: string; classDisplayName: string; category: string;
+    subj: Record<string, { attended: number; total: number; teachers: Record<string, number> }>;
+    attended: number; total: number;
+  }> = {};
+
+  for (const r of rows) {
+    const s = (students[r.admNo] ??= { admNo: r.admNo, name: r.name, classCode: r.classCode, classDisplayName: r.classDisplayName, category: r.classCategory, subj: {}, attended: 0, total: 0 });
+    const subjName = r.subject?.trim() || "General / Unassigned";
+    const sj = (s.subj[subjName] ??= { attended: 0, total: 0, teachers: {} });
+    // count only real (marked) sessions towards lesson totals
+    if (r.status === "unmarked") continue;
+    sj.total++; s.total++;
+    if (present(r.status)) { sj.attended++; s.attended++; }
+    if (r.teacher) sj.teachers[r.teacher] = (sj.teachers[r.teacher] ?? 0) + 1;
+  }
+
+  const byClass: Record<string, { classCode: string; displayName: string; category: string; students: StudentSubjectBlock[] }> = {};
+  for (const s of Object.values(students)) {
+    const subjects = Object.entries(s.subj)
+      .map(([subject, v]) => ({
+        subject, attended: v.attended, total: v.total, rate: pct(v.attended, v.total),
+        teacher: Object.entries(v.teachers).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "—",
+      }))
+      .sort((a, b) => natCmp(a.subject, b.subject));
+    const block: StudentSubjectBlock = {
+      admNo: s.admNo, name: s.name, classCode: s.classCode, classDisplayName: s.classDisplayName, category: s.category,
+      subjects, attended: s.attended, total: s.total, rate: pct(s.attended, s.total),
+    };
+    const c = (byClass[s.classCode] ??= { classCode: s.classCode, displayName: s.classDisplayName, category: s.category, students: [] });
+    c.students.push(block);
+  }
+  const classes = Object.values(byClass)
+    .map((c) => ({ ...c, students: c.students.sort((a, b) => natCmp(a.name, b.name)) }))
+    .sort((a, b) => natCmp(a.category, b.category) || natCmp(a.classCode, b.classCode));
+
+  return { classes, studentCount: Object.keys(students).length };
+}
+
+/* ------------------------------------------------- teacher performance (with UNITS) */
+export interface TeacherPerformance {
+  teacher: string; units: string[]; classes: string[];
+  sessionsMarked: number;   // distinct (date, class, subject) sessions
+  records: number;          // student-rows they touched
+  completed: number;        // non-unmarked records
+  complianceRate: number;   // completed / records — marking completeness
+  presentRate: number;      // present|late / completed — attendance they record
+  lastMarked: string | null;
+}
+
+/**
+ * Teacher performance for leadership — CRUCIALLY includes the units/subjects each
+ * teacher teaches (from the timetable directory, merged with subjects seen in
+ * attendance). `dir` maps teacherName → {units, classes}.
+ */
+export function computeTeacherPerformance(
+  rows: AnalyticsRow[],
+  dir: Record<string, { units: string[]; classes: string[] }> = {},
+): TeacherPerformance[] {
+  const agg: Record<string, {
+    teacher: string; sessions: Set<string>; records: number; completed: number; present: number;
+    units: Set<string>; classes: Set<string>; last: string;
+  }> = {};
+
+  for (const r of rows) {
+    if (!r.teacher) continue;
+    const t = (agg[r.teacher] ??= { teacher: r.teacher, sessions: new Set(), records: 0, completed: 0, present: 0, units: new Set(), classes: new Set(), last: "" });
+    t.records++;
+    if (r.classCode) t.classes.add(r.classCode);
+    if (r.subject?.trim()) t.units.add(r.subject.trim());
+    if (r.status !== "unmarked") {
+      t.completed++;
+      // a "session" = one class marked on one day (robust to missing subject ids)
+      t.sessions.add(`${r.date}|${r.classCode}`);
+      if (present(r.status)) t.present++;
+      if (r.date > t.last) t.last = r.date;
+    }
+  }
+
+  return Object.values(agg)
+    .map((t) => {
+      const fromDir = dir[t.teacher];
+      // prefer timetable units (authoritative); union with attendance-seen units
+      const units = [...new Set([...(fromDir?.units ?? []), ...t.units])].sort();
+      const classes = [...new Set([...(fromDir?.classes ?? []), ...t.classes])].sort();
+      return {
+        teacher: t.teacher, units, classes,
+        sessionsMarked: t.sessions.size, records: t.records, completed: t.completed,
+        complianceRate: pct(t.completed, t.records), presentRate: pct(t.present, t.completed),
+        lastMarked: t.last || null,
+      };
+    })
+    .sort((a, b) => b.sessionsMarked - a.sessionsMarked || b.records - a.records);
+}
+
+/* ------------------------------------------------- month-over-month trend */
+export interface MonthStat { month: string; label: string; present: number; total: number; rate: number; }
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+export function computeMonthlyTrend(rows: AnalyticsRow[]): MonthStat[] {
+  const agg: Record<string, { month: string; present: number; total: number }> = {};
+  for (const r of rows) {
+    if (r.status === "unmarked") continue;
+    const key = r.date.slice(0, 7); // YYYY-MM
+    const m = (agg[key] ??= { month: key, present: 0, total: 0 });
+    m.total++; if (present(r.status)) m.present++;
+  }
+  return Object.values(agg)
+    .map((m) => {
+      const [y, mm] = m.month.split("-");
+      return { ...m, label: `${MONTHS[Number(mm) - 1]} ${y}`, rate: pct(m.present, m.total) };
+    })
+    .sort((a, b) => a.month.localeCompare(b.month));
+}
+
+/* ------------------------------------------------- 80% attendance policy */
+export const POLICY_THRESHOLD = 80; // institute attendance policy (%)
+
+export interface PolicyRow { admNo: string; name: string; classCode: string; rate: number; total: number; status: "PASS" | "FAIL"; shortfall: number; }
+export interface PolicyClass { classCode: string; displayName: string; category: string; pass: number; fail: number; total: number; passRate: number; }
+export interface PolicyCompliance {
+  threshold: number;
+  students: PolicyRow[];
+  pass: number; fail: number; total: number; passRate: number;
+  byClass: PolicyClass[];
+}
+
+/** Flag every student PASS/FAIL against the attendance policy (default 80%). */
+export function computePolicyCompliance(rows: AnalyticsRow[], threshold = POLICY_THRESHOLD): PolicyCompliance {
+  const sa = computeStudentAnalytics(rows).filter((s) => s.total > 0);
+  const grouped = computeGroupedSummary(rows);
+  const meta = Object.fromEntries(grouped.classes.map((c) => [c.classCode, { displayName: c.displayName, category: c.category }]));
+
+  const students: PolicyRow[] = sa
+    .map((s) => ({ admNo: s.admNo, name: s.name, classCode: s.classCode, rate: s.rate, total: s.total, status: (s.rate >= threshold ? "PASS" : "FAIL") as "PASS" | "FAIL", shortfall: Math.max(0, threshold - s.rate) }))
+    .sort((a, b) => natCmp(a.classCode, b.classCode) || a.rate - b.rate);
+
+  const classAgg: Record<string, { classCode: string; pass: number; fail: number; total: number }> = {};
+  for (const s of students) {
+    const c = (classAgg[s.classCode] ??= { classCode: s.classCode, pass: 0, fail: 0, total: 0 });
+    c.total++; if (s.status === "PASS") c.pass++; else c.fail++;
+  }
+  const byClass: PolicyClass[] = Object.values(classAgg)
+    .map((c) => ({ ...c, displayName: meta[c.classCode]?.displayName ?? c.classCode, category: meta[c.classCode]?.category ?? "Other", passRate: pct(c.pass, c.total) }))
+    .sort((a, b) => b.passRate - a.passRate);
+
+  const pass = students.filter((s) => s.status === "PASS").length;
+  return { threshold, students, pass, fail: students.length - pass, total: students.length, passRate: pct(pass, students.length), byClass };
+}
+
+/* ------------------------------------------------- chronic absentee watchlist */
+export interface ChronicAbsentee {
+  admNo: string; name: string; classCode: string;
+  longestStreak: number;      // max consecutive absences ever in range
+  currentStreak: number;      // consecutive absences ending on their latest session
+  streakStart: string; streakEnd: string; // dates bounding the longest streak
+  totalAbsences: number; total: number; rate: number;
+  onWatch: boolean;           // currently absent for ≥ minStreak in a row
+}
+
+/**
+ * Detect consecutive-absence runs per student (chronological, session by session).
+ * `minStreak` (default 3) is the watchlist trigger. A late/present breaks a run.
+ */
+export function computeChronicAbsentees(rows: AnalyticsRow[], minStreak = 3): ChronicAbsentee[] {
+  const byStudent: Record<string, { name: string; classCode: string; events: Array<{ date: string; sessionId: string; status: AttendanceStatus }> }> = {};
+  for (const r of rows) {
+    if (r.status === "unmarked") continue;
+    const s = (byStudent[r.admNo] ??= { name: r.name, classCode: r.classCode, events: [] });
+    s.events.push({ date: r.date, sessionId: r.sessionId, status: r.status });
+  }
+
+  const out: ChronicAbsentee[] = [];
+  for (const [admNo, s] of Object.entries(byStudent)) {
+    s.events.sort((a, b) => a.date.localeCompare(b.date) || natCmp(a.sessionId, b.sessionId));
+    let longest = 0, cur = 0, longStart = "", longEnd = "", runStart = "";
+    let present = 0, absences = 0;
+    for (const e of s.events) {
+      if (e.status === "absent") {
+        absences++;
+        if (cur === 0) runStart = e.date;
+        cur++;
+        if (cur > longest) { longest = cur; longStart = runStart; longEnd = e.date; }
+      } else { present++; cur = 0; } // present or late — breaks the absence run
+    }
+    // currentStreak = trailing run of absences at the end of their timeline
+    let currentStreak = 0;
+    for (let i = s.events.length - 1; i >= 0; i--) { if (s.events[i].status === "absent") currentStreak++; else break; }
+    const total = s.events.length;
+    out.push({
+      admNo, name: s.name, classCode: s.classCode,
+      longestStreak: longest, currentStreak,
+      streakStart: longStart, streakEnd: longEnd,
+      totalAbsences: absences, total, rate: pct(present, total),
+      onWatch: currentStreak >= minStreak,
+    });
+  }
+  return out
+    .filter((c) => c.longestStreak >= minStreak)
+    .sort((a, b) => Number(b.onWatch) - Number(a.onWatch) || b.currentStreak - a.currentStreak || b.longestStreak - a.longestStreak);
+}
+
+/* ------------------------------------------------- register grid (day-by-day) */
+export interface GridCol { key: string; date: string; sessionId: string; label: string; }
+export interface GridStudentRow { admNo: string; name: string; cells: Record<string, string>; present: number; absent: number; late: number; marked: number; rate: number; }
+export interface RegisterGridClass {
+  classCode: string; displayName: string; category: string;
+  columns: GridCol[];
+  students: GridStudentRow[];
+  colTotals: Record<string, { present: number; absent: number; late: number; marked: number; rate: number }>;
+}
+
+const LETTER: Record<AttendanceStatus, string> = { present: "P", absent: "A", late: "L", unmarked: "–" };
+
+/**
+ * The on-screen register, exported: per class a grid of students × (date+session)
+ * columns filled with P/A/L/–, per-student totals, and per-column column totals.
+ */
+export function computeRegisterGrid(rows: AnalyticsRow[]): RegisterGridClass[] {
+  const classes: Record<string, {
+    classCode: string; displayName: string; category: string;
+    cols: Map<string, GridCol>;
+    students: Record<string, { admNo: string; name: string; cells: Record<string, string>; present: number; absent: number; late: number; marked: number }>;
+  }> = {};
+
+  for (const r of rows) {
+    const c = (classes[r.classCode] ??= { classCode: r.classCode, displayName: r.classDisplayName, category: r.classCategory, cols: new Map(), students: {} });
+    const key = `${r.date}#${r.sessionId}`;
+    if (!c.cols.has(key)) c.cols.set(key, { key, date: r.date, sessionId: r.sessionId, label: gridLabel(r.date, r.sessionId) });
+    const s = (c.students[r.admNo] ??= { admNo: r.admNo, name: r.name, cells: {}, present: 0, absent: 0, late: 0, marked: 0 });
+    s.cells[key] = LETTER[r.status];
+    if (r.status === "present") { s.present++; s.marked++; }
+    else if (r.status === "late") { s.late++; s.marked++; }
+    else if (r.status === "absent") { s.absent++; s.marked++; }
+  }
+
+  return Object.values(classes)
+    .map((c) => {
+      const columns = [...c.cols.values()].sort((a, b) => a.date.localeCompare(b.date) || natCmp(a.sessionId, b.sessionId));
+      // clean labels: single session/day → just the date; multiple → date + S1/S2…
+      const perDate: Record<string, GridCol[]> = {};
+      for (const col of columns) (perDate[col.date] ??= []).push(col);
+      for (const cols of Object.values(perDate)) {
+        cols.forEach((col, i) => { col.label = cols.length > 1 ? `${dayDateLabel(col.date)} S${i + 1}` : dayDateLabel(col.date); });
+      }
+      const students: GridStudentRow[] = Object.values(c.students)
+        .map((s) => ({ ...s, rate: pct(s.present + s.late, s.marked) }))
+        .sort((a, b) => natCmp(a.name, b.name));
+      const colTotals: RegisterGridClass["colTotals"] = {};
+      for (const col of columns) {
+        let p = 0, a = 0, l = 0;
+        for (const s of students) {
+          const v = s.cells[col.key];
+          if (v === "P") p++; else if (v === "A") a++; else if (v === "L") l++;
+        }
+        const marked = p + a + l;
+        colTotals[col.key] = { present: p, absent: a, late: l, marked, rate: pct(p + l, marked) };
+      }
+      return { classCode: c.classCode, displayName: c.displayName, category: c.category, columns, students, colTotals };
+    })
+    .sort((a, b) => natCmp(a.category, b.category) || natCmp(a.classCode, b.classCode));
+}
+
+const DAY3 = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+/** "Tue 23/06" — weekday + day/month, from an ISO date. */
+function dayDateLabel(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const wd = DAY3[new Date(Date.UTC(y, (m ?? 1) - 1, d ?? 1)).getUTCDay()];
+  return `${wd} ${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}`;
+}
+/** initial column label (refined per-day inside computeRegisterGrid). */
+function gridLabel(iso: string, _sessionId: string): string { return dayDateLabel(iso); }
+
+/* ------------------------------------------------- leadership brief */
+export interface LeadershipSummary {
+  overview: Overview;
+  byClassRanked: Array<{ classCode: string; displayName: string; category: string; rate: number; total: number; students: number; band: "Good" | "Warning" | "Critical" }>;
+  topSubjects: SubjectStat[];
+  bottomSubjects: SubjectStat[];
+  problematic: StudentAnalytics[];   // < 60%, ≥3 sessions
+  topPerformers: StudentAnalytics[]; // ≥ 90%, ≥5 sessions
+  teachers: TeacherPerformance[];
+  monthlyTrend: MonthStat[];
+  trend: { delta: number; arrow: "↑" | "↓" | "→"; latest: MonthStat | null; previous: MonthStat | null };
+  policy: PolicyCompliance;
+  chronic: ChronicAbsentee[];
+}
+
+export function computeLeadershipSummary(
+  rows: AnalyticsRow[],
+  dir: Record<string, { units: string[]; classes: string[] }> = {},
+): LeadershipSummary {
+  const overview = computeOverview(rows);
+  const grouped = computeGroupedSummary(rows);
+  const byClassRanked = grouped.classes
+    .map((c) => ({ classCode: c.classCode, displayName: c.displayName, category: c.category, rate: c.rate, total: c.total, students: c.studentCount, band: statusBand(c.rate) }))
+    .sort((a, b) => b.rate - a.rate);
+  const { most, least } = topAndBottomSubjects(rows, 5, 3);
+  const studentAnalytics = computeStudentAnalytics(rows);
+  const problematic = studentAnalytics.filter((s) => s.total >= 3 && s.rate < 60).sort((a, b) => a.rate - b.rate);
+  const topPerformers = studentAnalytics.filter((s) => s.total >= 5 && s.rate >= 90).sort((a, b) => b.rate - a.rate || b.total - a.total);
+  const teachers = computeTeacherPerformance(rows, dir);
+  const monthlyTrend = computeMonthlyTrend(rows);
+  const latest = monthlyTrend[monthlyTrend.length - 1] ?? null;
+  const previous = monthlyTrend[monthlyTrend.length - 2] ?? null;
+  const delta = latest && previous ? latest.rate - previous.rate : 0;
+  const arrow: "↑" | "↓" | "→" = delta > 1 ? "↑" : delta < -1 ? "↓" : "→";
+  const policy = computePolicyCompliance(rows);
+  const chronic = computeChronicAbsentees(rows, 3);
+
+  return { overview, byClassRanked, topSubjects: most, bottomSubjects: least, problematic, topPerformers, teachers, monthlyTrend, trend: { delta, arrow, latest, previous }, policy, chronic };
 }
