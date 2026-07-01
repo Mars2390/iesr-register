@@ -332,7 +332,7 @@ export function buildPolicyCsv(rows: AnalyticsRow[], meta: Meta): string {
 
   out.push(rule(`STUDENTS BELOW POLICY (< ${p.threshold}%)`));
   const failing = p.students.filter((s) => s.status === "FAIL");
-  if (failing.length === 0) out.push("None — every student meets the attendance policy. 🎉");
+  if (failing.length === 0) out.push("None — every student meets the attendance policy.");
   else {
     out.push(row(["Class", "Student", "Admission No", "Attendance %", "Shortfall", "Status"]));
     for (const s of failing) out.push(row([s.classCode, s.name, s.admNo, `${s.rate}%`, `-${s.shortfall}%`, s.status]));
@@ -356,7 +356,7 @@ export function buildChronicAbsenteeCsv(rows: AnalyticsRow[], meta: Meta, minStr
     row(["On active watch (currently absent streak):", onWatch.length, "Flagged in period:", list.length]),
   ]);
 
-  out.push(rule("⚠ ACTIVE WATCHLIST — currently on an absence streak"));
+  out.push(rule("ACTIVE WATCHLIST — currently on an absence streak"));
   if (onWatch.length === 0) out.push("None currently on an active absence streak.");
   else {
     out.push(row(["Class", "Student", "Admission No", "Current Streak", "Longest Streak", "Total Absences", "Attendance %", "Action"]));

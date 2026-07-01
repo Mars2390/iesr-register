@@ -29,7 +29,7 @@ export async function buildAllReportsZip(o: BundleOptions): Promise<Uint8Array> 
   // headline documents
   zip.file("00_Leadership_Brief.pdf", buildLeadershipPdf(summary, { from: meta.from, to: meta.to, schoolName: meta.schoolName, scope: meta.scope }));
   zip.file("00_Leadership_Workbook.xlsx", await buildLeadershipXlsx(summary, { ...meta, title: "Attendance Leadership Brief" }));
-  zip.file("00_Leadership_Data.csv", buildLeadershipCsv(summary, { ...meta, title: "Attendance Leadership Brief" }));
+  zip.file("00_Leadership_Data.csv", "﻿" + buildLeadershipCsv(summary, { ...meta, title: "Attendance Leadership Brief" })); // UTF-8 BOM for Excel
 
   // detailed workbooks
   zip.file("01_Attendance_Summary_by_Class.xlsx", await buildGroupedSummaryXlsx(rows, { ...meta, title: "Attendance Summary" }));

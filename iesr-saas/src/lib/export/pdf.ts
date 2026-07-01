@@ -1,6 +1,8 @@
 // PDF export builders — ported from legacy js/reports.js (jsPDF + autotable).
 // Runs in the Node runtime (the export route sets runtime = "nodejs"); uses the
 // jspdf-autotable functional API. Each builder returns the PDF bytes.
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import type { Momentum, ProblematicResult, Insights, Overview, LeadershipSummary, GroupedSummary } from "@/lib/analytics";
@@ -8,30 +10,116 @@ import { statusBand } from "@/lib/analytics";
 
 const BRAND: [number, number, number] = [11, 46, 99];    // kplc navy
 const ACCENT: [number, number, number] = [20, 102, 184]; // kplc blue
+const YELLOW: [number, number, number] = [245, 197, 24]; // kplc yellow
+const SCHOOL_NAME = "Institute of Energy Studies & Research";
 const bytes = (doc: jsPDF) => new Uint8Array(doc.output("arraybuffer") as ArrayBuffer);
 const finalY = (doc: jsPDF) => (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
 
-const stamp = (doc: jsPDF, title: string, sub: string) => {
-  doc.setFontSize(18); doc.text(title, 15, 16);
-  doc.setFontSize(11); doc.setTextColor(110);
-  doc.text(sub, 15, 24);
-  doc.text(`Generated: ${new Date().toISOString()}`, 15, 30);
+/* --------------------------------------------------- official IESR/KPLC chrome */
+// Load the IESR wordmark once (Node runtime). Falls back gracefully if missing.
+let LOGO: string | null | undefined;
+function logoDataUri(): string | null {
+  if (LOGO !== undefined) return LOGO;
+  try {
+    const b = readFileSync(join(process.cwd(), "public", "images", "iesr-4.jpg"));
+    LOGO = `data:image/jpeg;base64,${b.toString("base64")}`;
+  } catch { LOGO = null; }
+  return LOGO;
+}
+
+const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const niceDate = (iso: string) => {
+  const [y, m, d] = (iso ?? "").split("-");
+  return y && m && d ? `${d} ${MONTHS_SHORT[Number(m) - 1] ?? m} ${y}` : iso ?? "";
+};
+
+interface HeaderOpts { title: string; from?: string; to?: string; sub?: string; schoolName?: string; }
+
+/**
+ * Official IESR / Kenya Power report header: navy band, IESR logo top-left,
+ * "An Initiative of Kenya Power" top-right, centred title, period + school name,
+ * and a yellow accent divider. Returns the Y at which body content should start.
+ */
+function officialHeader(doc: jsPDF, o: HeaderOpts): number {
+  const W = doc.internal.pageSize.getWidth();
+  const school = o.schoolName ?? SCHOOL_NAME;
+  const bandH = 34;
+
+  doc.setFillColor(...BRAND); doc.rect(0, 0, W, bandH, "F");
+
+  // logo on a white chip for contrast
+  const logo = logoDataUri();
+  if (logo) {
+    doc.setFillColor(255, 255, 255); doc.roundedRect(12, 6, 22, 22, 2, 2, "F");
+    try { doc.addImage(logo, "JPEG", 13.5, 7.5, 19, 19); } catch { /* skip on decode issue */ }
+  }
+
+  // school identity next to the logo
+  doc.setTextColor(255); doc.setFont("helvetica", "bold"); doc.setFontSize(12);
+  doc.text("IESR", 40, 14);
+  doc.setFont("helvetica", "normal"); doc.setFontSize(9);
+  doc.text(school, 40, 20);
+  doc.setTextColor(...YELLOW); doc.setFontSize(7.5);
+  doc.text("An Initiative of Kenya Power", 40, 26);
+
+  // right-aligned institutional tag
+  doc.setTextColor(255, 255, 255); doc.setFont("helvetica", "normal"); doc.setFontSize(8);
+  doc.text("Kenya Power · IESR", W - 12, 12, { align: "right" });
+  doc.setFontSize(7); doc.setTextColor(210, 220, 235);
+  doc.text("OFFICIAL ATTENDANCE DOCUMENT", W - 12, 18, { align: "right" });
+
+  // centred title + period
+  doc.setTextColor(255); doc.setFont("helvetica", "bold"); doc.setFontSize(15);
+  doc.text(o.title, W / 2, 15, { align: "center" });
+  doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(225, 232, 245);
+  const period = o.from && o.to ? `Period: ${niceDate(o.from)} to ${niceDate(o.to)}` : (o.sub ?? "");
+  if (period) doc.text(period, W / 2, 24, { align: "center" });
+  if (o.sub && o.from) doc.text(o.sub, W / 2, 30, { align: "center" });
+
+  // yellow accent divider
+  doc.setFillColor(...YELLOW); doc.rect(0, bandH, W, 1.6, "F");
+  doc.setTextColor(0); doc.setFont("helvetica", "normal");
+  return bandH + 10; // content start
+}
+
+/** Confidential footer + page numbers on every page. Call just before bytes(). */
+function officialFooter(doc: jsPDF, schoolName?: string) {
+  const W = doc.internal.pageSize.getWidth();
+  const H = doc.internal.pageSize.getHeight();
+  const school = schoolName ?? SCHOOL_NAME;
+  const pages = doc.getNumberOfPages();
+  const gen = new Date().toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" });
+  for (let p = 1; p <= pages; p++) {
+    doc.setPage(p);
+    doc.setDrawColor(210); doc.setLineWidth(0.2); doc.line(12, H - 12, W - 12, H - 12);
+    doc.setFontSize(7.5); doc.setTextColor(140); doc.setFont("helvetica", "normal");
+    doc.text(`${school} · Kenya Power  ·  Generated ${gen}`, 12, H - 7);
+    doc.text(`Page ${p} of ${pages}`, W - 12, H - 7, { align: "right" });
+  }
   doc.setTextColor(0);
+}
+
+/** Shared meta for the branded builders. */
+export interface ReportMeta { from?: string; to?: string; schoolName?: string; scope?: string; }
+const sectionTitle = (doc: jsPDF, text: string, y: number) => {
+  doc.setFont("helvetica", "bold"); doc.setFontSize(12); doc.setTextColor(...BRAND);
+  doc.text(text, 15, y); doc.setTextColor(0); doc.setFont("helvetica", "normal");
 };
 
 /** Teacher momentum (legacy exportTeacherMomentumPDF). */
-export function buildMomentumPdf(m: Momentum, range: string): Uint8Array {
+export function buildMomentumPdf(m: Momentum, meta: ReportMeta = {}): Uint8Array {
   const doc = new jsPDF("landscape");
-  stamp(doc, "Teacher Attendance Momentum", `Teacher: ${m.teacher}   ·   ${range}`);
+  let y = officialHeader(doc, { title: "Teacher Attendance Momentum Report", from: meta.from, to: meta.to, sub: `Teacher: ${m.teacher || "—"}`, schoolName: meta.schoolName });
 
-  doc.setFontSize(12);
+  doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.setTextColor(...BRAND);
   doc.text(
-    `Lessons: ${m.totalLessons}   Present: ${m.totalPresent}   Absent: ${m.totalAbsent}   Late: ${m.totalLate}   Overall: ${m.overallPercentage}%`,
-    15, 40,
+    `Lessons: ${m.totalLessons}    Present: ${m.totalPresent}    Absent: ${m.totalAbsent}    Late: ${m.totalLate}    Overall: ${m.overallPercentage}%`,
+    15, y,
   );
+  doc.setTextColor(0); doc.setFont("helvetica", "normal"); y += 6;
 
   autoTable(doc, {
-    startY: 46,
+    startY: y,
     head: [["Student", "Admission", "Present", "Absent", "Late", "Total", "%", "Status"]],
     body: m.studentDetails.map((s) => [
       s.name.slice(0, 28), s.admission, s.present, s.absent, s.late, s.total, `${s.percentage}%`, statusBand(s.percentage),
@@ -39,77 +127,77 @@ export function buildMomentumPdf(m: Momentum, range: string): Uint8Array {
     theme: "grid", styles: { fontSize: 8 }, headStyles: { fillColor: BRAND },
   });
 
-  const y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 12;
-  doc.setFontSize(13); doc.text("Weekly Trends", 15, y);
+  y = finalY(doc) + 12;
+  sectionTitle(doc, "Weekly trends", y);
   autoTable(doc, {
     startY: y + 4,
     head: [["Week of", "Present", "Absent", "Total", "Attendance %"]],
-    body: m.weeklyTrends.map((w) => [w.weekStart, w.present, w.absent, w.total, `${w.attendancePercentage}%`]),
+    body: m.weeklyTrends.map((w) => [niceDate(w.weekStart), w.present, w.absent, w.total, `${w.attendancePercentage}%`]),
     theme: "striped", styles: { fontSize: 9 }, headStyles: { fillColor: BRAND },
   });
+  officialFooter(doc, meta.schoolName);
   return bytes(doc);
 }
 
 /** Problematic students (legacy exportProblematicStudentsCSV → PDF form). */
-export function buildProblematicPdf(p: ProblematicResult, range: string): Uint8Array {
+export function buildProblematicPdf(p: ProblematicResult, meta: ReportMeta = {}): Uint8Array {
   const doc = new jsPDF();
-  stamp(doc, "Problematic Students", `Students with 3+ missed classes   ·   ${range}`);
+  const y = officialHeader(doc, { title: "Problematic Students Report", from: meta.from, to: meta.to, sub: "Students with 3+ missed sessions", schoolName: meta.schoolName });
   autoTable(doc, {
-    startY: 38,
+    startY: y,
     head: [["Student", "Admission", "Class", "Overall %", "Missed", "Action"]],
     body: p.students.map((s) => [s.name.slice(0, 26), s.admission, s.classCode, `${s.overallPercentage}%`, s.missedCount, s.action]),
     theme: "grid", styles: { fontSize: 8 }, headStyles: { fillColor: BRAND },
   });
   if (p.subjectFlags.length) {
-    const y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 12;
-    doc.setFontSize(13); doc.text("Subject-specific issues", 15, y);
+    const y2 = finalY(doc) + 12;
+    sectionTitle(doc, "Subject-specific issues", y2);
     autoTable(doc, {
-      startY: y + 4,
-      head: [["Student", "Subject", "Teacher", "Missed", "Last missed"]],
-      body: p.subjectFlags.map((f) => [f.studentName.slice(0, 24), f.subject, f.teacher, f.missedCount, f.lastMissed]),
+      startY: y2 + 4,
+      head: [["Student", "Unit / Subject", "Teacher", "Missed", "Last missed"]],
+      body: p.subjectFlags.map((f) => [f.studentName.slice(0, 24), f.subject, f.teacher, f.missedCount, niceDate(f.lastMissed)]),
       theme: "striped", styles: { fontSize: 8 }, headStyles: { fillColor: BRAND },
     });
   }
+  officialFooter(doc, meta.schoolName);
   return bytes(doc);
 }
 
 /** HOA/HOD overview: school totals + class comparison (legacy HOA report). */
-export function buildHoaPdf(overview: Overview, insights: Insights, range: string): Uint8Array {
+export function buildHoaPdf(overview: Overview, insights: Insights, meta: ReportMeta = {}): Uint8Array {
   const doc = new jsPDF();
-  stamp(doc, "Head of Department — Attendance Report", range);
-  doc.setFontSize(12);
-  doc.text(
-    `Students: ${overview.students}   Sessions: ${overview.total}   Present: ${overview.present}   Absent: ${overview.absent}   Late: ${overview.late}   Rate: ${overview.rate}%`,
-    15, 40,
-  );
+  let y = officialHeader(doc, { title: "Head of Department — Attendance Report", from: meta.from, to: meta.to, schoolName: meta.schoolName });
 
-  doc.setFontSize(13); doc.text("Attendance by class", 15, 50);
+  doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.setTextColor(...BRAND);
+  doc.text(
+    `Students: ${overview.students}    Sessions: ${overview.total}    Present: ${overview.present}    Absent: ${overview.absent}    Late: ${overview.late}    Rate: ${overview.rate}%`,
+    15, y,
+  );
+  doc.setTextColor(0); doc.setFont("helvetica", "normal"); y += 8;
+
+  sectionTitle(doc, "Attendance by class", y);
   autoTable(doc, {
-    startY: 54,
+    startY: y + 4,
     head: [["Class", "Sessions", "Attendance %", "Status"]],
     body: insights.byClass.map((c) => [c.classCode, c.total, `${c.rate}%`, statusBand(c.rate)]),
     theme: "grid", styles: { fontSize: 9 }, headStyles: { fillColor: BRAND },
   });
 
-  const y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 12;
-  doc.setFontSize(13); doc.text("Most absent students", 15, y);
+  y = finalY(doc) + 12;
+  sectionTitle(doc, "Most absent students", y);
   autoTable(doc, {
     startY: y + 4,
     head: [["Student", "Admission", "Class", "Absent", "Absence %"]],
     body: insights.mostAbsent.map((s) => [s.name.slice(0, 26), s.admNo, s.classCode, s.absent, `${s.rate}%`]),
     theme: "striped", styles: { fontSize: 8 }, headStyles: { fillColor: BRAND },
   });
+  officialFooter(doc, meta.schoolName);
   return bytes(doc);
 }
 
 /* ================================================================== *
  * LEADERSHIP BRIEF (Dean / HOA / HOD) — the flagship one-document view *
  * ================================================================== */
-const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const niceDate = (iso: string) => {
-  const [y, m, d] = iso.split("-");
-  return y && m && d ? `${d} ${MONTHS_SHORT[Number(m) - 1] ?? m} ${y}` : iso;
-};
 const bandColor = (band: string): [number, number, number] =>
   band === "Good" ? [16, 122, 87] : band === "Warning" ? [180, 120, 10] : [176, 42, 55];
 
@@ -118,18 +206,11 @@ export interface LeadershipMeta { from: string; to: string; schoolName?: string;
 export function buildLeadershipPdf(s: LeadershipSummary, meta: LeadershipMeta): Uint8Array {
   const doc = new jsPDF();
   const W = doc.internal.pageSize.getWidth();
-  const school = meta.schoolName ?? "Institute of Energy Studies & Research · Kenya Power";
 
-  // ---- branded header band
-  doc.setFillColor(...BRAND); doc.rect(0, 0, W, 34, "F");
-  doc.setTextColor(255); doc.setFont("helvetica", "bold"); doc.setFontSize(17);
-  doc.text("Attendance Leadership Brief", 15, 15);
-  doc.setFont("helvetica", "normal"); doc.setFontSize(10);
-  doc.text(school, 15, 22);
-  doc.text(`Period: ${niceDate(meta.from)} to ${niceDate(meta.to)}${meta.scope ? "   ·   " + meta.scope : ""}`, 15, 28);
-  doc.setTextColor(0);
+  // ---- official IESR / Kenya Power header (logo + wordmark + divider)
+  officialHeader(doc, { title: "Attendance Leadership Brief", from: meta.from, to: meta.to, sub: meta.scope, schoolName: meta.schoolName });
 
-  // ---- headline KPI strip
+  // ---- headline KPI strip (just below the header divider)
   const kpis: Array<[string, string]> = [
     ["Overall attendance", `${s.overview.rate}%`],
     ["Students", `${s.overview.students}`],
@@ -141,11 +222,11 @@ export function buildLeadershipPdf(s: LeadershipSummary, meta: LeadershipMeta): 
   kpis.forEach(([label, val], i) => {
     const x = 15 + i * cardW;
     doc.setDrawColor(225); doc.setFillColor(246, 248, 251);
-    doc.roundedRect(x, 40, cardW - 4, 20, 2, 2, "FD");
+    doc.roundedRect(x, 46, cardW - 4, 20, 2, 2, "FD");
     doc.setTextColor(...ACCENT); doc.setFont("helvetica", "bold"); doc.setFontSize(14);
-    doc.text(val, x + 4, 50);
+    doc.text(val, x + 4, 56);
     doc.setTextColor(110); doc.setFont("helvetica", "normal"); doc.setFontSize(7.5);
-    doc.text(label.toUpperCase(), x + 4, 56);
+    doc.text(label.toUpperCase(), x + 4, 62);
   });
   doc.setTextColor(0);
 
@@ -283,14 +364,7 @@ export function buildLeadershipPdf(s: LeadershipSummary, meta: LeadershipMeta): 
     });
   }
 
-  // ---- page footers
-  const pages = doc.getNumberOfPages();
-  for (let p = 1; p <= pages; p++) {
-    doc.setPage(p);
-    doc.setFontSize(8); doc.setTextColor(150);
-    doc.text(`${school}  ·  Confidential — for institutional leadership`, 15, doc.internal.pageSize.getHeight() - 8);
-    doc.text(`Page ${p} of ${pages}`, W - 30, doc.internal.pageSize.getHeight() - 8);
-  }
+  officialFooter(doc, meta.schoolName);
   return bytes(doc);
 }
 
@@ -388,12 +462,18 @@ export function buildCertificatesPdf(grouped: GroupedSummary, meta: CertificateM
     doc.setDrawColor(...ACCENT); doc.setLineWidth(0.4); doc.rect(14, 14, W - 28, H - 28);
     doc.setLineWidth(0.2);
 
-    // header band
+    // header band + IESR logo
     doc.setFillColor(...BRAND); doc.rect(14, 14, W - 28, 24, "F");
+    const logo = logoDataUri();
+    if (logo) {
+      doc.setFillColor(255, 255, 255); doc.roundedRect(20, 17, 18, 18, 2, 2, "F");
+      try { doc.addImage(logo, "JPEG", 21.5, 18.5, 15, 15); } catch { /* skip */ }
+    }
     doc.setTextColor(255); doc.setFont("helvetica", "bold"); doc.setFontSize(15);
     doc.text(school, W / 2, cy + 4, { align: "center" });
     doc.setFont("helvetica", "normal"); doc.setFontSize(9);
-    doc.text("Kenya Power · Institute of Energy Studies & Research", W / 2, cy + 11, { align: "center" });
+    doc.setTextColor(...YELLOW);
+    doc.text("An Initiative of Kenya Power · Institute of Energy Studies & Research", W / 2, cy + 11, { align: "center" });
     doc.setTextColor(0);
 
     // title

@@ -100,7 +100,9 @@ export async function GET(req: Request) {
       case "problematic": csv = buildProblematicCsv(rows, meta); break;
       default: csv = buildGroupedSummaryCsv(rows, meta); break;
     }
-    return new NextResponse(csv, {
+    // Prepend a UTF-8 BOM so Excel decodes accents / section rules correctly
+    // (without it, Excel reads the file as Latin-1 → "âââ" garbage in headers).
+    return new NextResponse("﻿" + csv, {
       headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="IESR_${type}_${stamp}.csv"` },
     });
   }
@@ -132,11 +134,11 @@ export async function GET(req: Request) {
       pdf = buildCertificatesPdf(computeGroupedSummary(rows), { from, to, schoolName: settings.schoolName, term: settings.term });
     } else if (type === "momentum") {
       if (!filters.teacherId) return badRequest("momentum_requires_teacher");
-      pdf = buildMomentumPdf(computeMomentum(rows, rows[0]?.teacher ?? ""), `${from} to ${to}`);
+      pdf = buildMomentumPdf(computeMomentum(rows, rows[0]?.teacher ?? ""), { from, to, schoolName: settings.schoolName, scope });
     } else if (type === "problematic") {
-      pdf = buildProblematicPdf(computeProblematic(rows, 3), `${from} to ${to}`);
+      pdf = buildProblematicPdf(computeProblematic(rows, 3), { from, to, schoolName: settings.schoolName, scope });
     } else {
-      pdf = buildHoaPdf(computeOverview(rows), computeInsights(rows), `${from} to ${to}`);
+      pdf = buildHoaPdf(computeOverview(rows), computeInsights(rows), { from, to, schoolName: settings.schoolName, scope });
     }
     return new NextResponse(Buffer.from(pdf), {
       headers: { "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="IESR_${type}_${stamp}.pdf"` },
