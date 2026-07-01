@@ -4,7 +4,7 @@ import { Navbar } from "@/components/landing/Navbar";
 import { Hero } from "@/components/landing/Hero";
 import { Reveal } from "@/components/landing/Reveal";
 import { LiveStats } from "@/components/landing/LiveStats";
-import { getPublicStats } from "@/lib/data/public";
+import { getPublicStats, getPublicClasses } from "@/lib/data/public";
 
 export const dynamic = "force-dynamic"; // real, live stats every request
 
@@ -17,6 +17,7 @@ const IconFlag = ({ className }: I) => (<svg viewBox="0 0 24 24" className={clas
 const IconDoc = ({ className }: I) => (<svg viewBox="0 0 24 24" className={className} fill="none"><path d="M7 3h7l5 5v13H7zM14 3v5h5M9 13h6M9 17h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>);
 const IconShield = ({ className }: I) => (<svg viewBox="0 0 24 24" className={className} fill="none"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" /></svg>);
 const IconArrow = ({ className }: I) => (<svg viewBox="0 0 24 24" className={className} fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>);
+const IconBolt = ({ className }: I) => (<svg viewBox="0 0 24 24" className={className} fill="none"><path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>);
 
 const FEATURES = [
   { icon: IconCheck, title: "One-tap marking", body: "Present, Absent, Late or Unmarked per student, per session — fast, accurate registers on any device.", detail: "Works offline-friendly on any phone or tablet, so a full class is marked in under a minute — no app install, no paper." },
@@ -45,14 +46,30 @@ const AUDIENCES = [
   { img: "/images/iesr-10.jpg", role: "Parents & sponsors", body: "Clear visibility into a trainee's attendance and engagement — present, absent and late at a glance." },
 ];
 
-const TESTIMONIALS = [
-  { img: "/images/iesr-8.jpeg", quote: "We replaced a fragile spreadsheet with a platform the whole institute trusts. Marking takes seconds and the reports write themselves.", who: "Training Administration", role: "IESR, Nairobi" },
-  { img: "/images/iesr-9.jpeg", quote: "Seeing who is marking, live, changed how we run the day. Issues get flagged and resolved before they grow.", who: "Programme Coordination", role: "Institute of Energy Studies & Research" },
-  { img: "/images/iesr-16.jpg", quote: "Practical labs, field work and classroom sessions all land in one accurate record. Attendance finally matches how we actually train.", who: "Technical Instruction", role: "Power Systems, IESR" },
+// Real IESR programmes — the actual diploma cohorts and short courses the
+// institute runs (same list used across the app's data + footer). No invented quotes.
+const PROGRAMMES = [
+  { name: "Diploma in Electrical Engineering", tag: "Diploma" },
+  { name: "Safety Competency in Power Systems", tag: "Short course" },
+  { name: "Renewable Energy — Solar PV Systems", tag: "Short course" },
+  { name: "Project Management", tag: "Short course" },
+  { name: "Leadership & Supervision", tag: "Short course" },
+  { name: "Advanced Excel", tag: "Short course" },
 ];
 
 export default async function LandingPage() {
-  const stats = await getPublicStats();
+  const [stats, classes] = await Promise.all([getPublicStats(), getPublicClasses()]);
+  // Real, active cohorts from the database (code + name). Fall back to the
+  // static programme list only if the register has no classes yet.
+  // displayName is stored as "CODE (Programme name)" — surface the readable
+  // programme as the title and the class code as the tag (no duplicate code).
+  const cohorts = classes.slice(0, 9).map((c) => {
+    const m = c.displayName.match(/\(([^)]+)\)\s*$/);
+    return { name: m ? m[1].trim() : c.displayName, tag: c.code };
+  });
+  const programmes = cohorts.length ? cohorts : PROGRAMMES;
+  const usingLiveClasses = cohorts.length > 0;
+  const moreCount = Math.max(0, classes.length - cohorts.length);
   return (
     <div className="overflow-x-hidden bg-white">
       <Navbar />
@@ -238,32 +255,43 @@ export default async function LandingPage() {
         </div>
       </section>
 
-      {/* testimonials */}
+      {/* programmes — real IESR courses running on the register (no invented testimonials) */}
       <section className="py-20 sm:py-28">
         <div className="container-page">
           <Reveal className="mx-auto max-w-2xl text-center">
-            <p className="eyebrow text-kplc-blue">In their words</p>
-            <h2 className="mt-3 text-3xl font-bold sm:text-4xl">Built for real training days</h2>
-            <p className="mt-4 text-lg text-slate-600">How the register changes the working day across the institute.</p>
+            <p className="eyebrow text-kplc-blue">Programmes</p>
+            <h2 className="mt-3 text-3xl font-bold sm:text-4xl">
+              {usingLiveClasses ? "Active cohorts on the register" : "Running live across every IESR programme"}
+            </h2>
+            <p className="mt-4 text-lg text-slate-600">
+              {usingLiveClasses
+                ? "These are the live classes marking attendance right now — pulled straight from the register, updated as cohorts start and finish."
+                : "From diploma cohorts to short professional courses, every session is marked, monitored and reported on the same register."}
+            </p>
           </Reveal>
-          <div className="mt-12 grid gap-6 md:grid-cols-3">
-            {TESTIMONIALS.map((t) => (
-              <Reveal key={t.who}>
-                <figure className="card flex h-full flex-col p-6">
-                  <blockquote className="flex-1 text-lg font-medium leading-relaxed text-slate-700">&ldquo;{t.quote}&rdquo;</blockquote>
-                  <figcaption className="mt-6 flex items-center gap-3">
-                    <span className="relative h-12 w-12 overflow-hidden rounded-full ring-1 ring-slate-200">
-                      <Image src={t.img} alt="" fill sizes="48px" className="object-cover" />
-                    </span>
-                    <div>
-                      <p className="font-semibold text-slate-800">{t.who}</p>
-                      <p className="text-sm text-slate-500">{t.role}</p>
-                    </div>
-                  </figcaption>
-                </figure>
+
+          <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {programmes.map((p, i) => (
+              <Reveal key={`${p.tag}-${p.name}`} delay={(i % 3) * 0.06}>
+                <div className="group card flex h-full items-center gap-4 p-5 hover:-translate-y-0.5 hover:border-kplc-blue/30 hover:shadow-md">
+                  <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-kplc-blue to-kplc-navy text-white transition-transform duration-300 group-hover:scale-110">
+                    <IconBolt className="h-5 w-5" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate text-[15px] font-semibold leading-snug text-slate-800 group-hover:text-kplc-navy" title={p.name}>{p.name}</p>
+                    <p className="mt-0.5 truncate text-xs font-semibold uppercase tracking-wide text-kplc-blue" title={p.tag}>{p.tag}</p>
+                  </div>
+                </div>
               </Reveal>
             ))}
           </div>
+
+          <Reveal className="mt-10 text-center">
+            <p className="text-sm text-slate-500">
+              {moreCount > 0 && <span className="font-semibold text-slate-700">+{moreCount} more active {moreCount === 1 ? "class" : "classes"} · </span>}
+              Institute of Energy Studies &amp; Research · Kenya Power&apos;s training arm since <span className="font-semibold text-slate-700">1957</span>
+            </p>
+          </Reveal>
         </div>
       </section>
 

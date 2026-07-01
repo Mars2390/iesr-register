@@ -19,12 +19,13 @@ const IconBuilding = ({ className }: I) => (<svg viewBox="0 0 24 24" className={
 
 /* ------------------------------------------------------ menu structure */
 type MenuItem = { icon: (p: I) => JSX.Element; label: string; blurb: string; href: string };
-type Nav = { label: string; href: string; tagline?: string; items?: MenuItem[] };
+type Nav = { label: string; href: string; tagline?: string; align?: "left" | "right"; items?: MenuItem[] };
 
 const NAV: Nav[] = [
   {
     label: "Features",
     href: "#features",
+    align: "left",
     tagline: "Everything a modern register should be — the speed of paper, the power of the cloud.",
     items: [
       { icon: IconCheck, label: "One-tap marking", blurb: "Present, Absent, Late per session — on any device.", href: "#features" },
@@ -36,6 +37,7 @@ const NAV: Nav[] = [
   {
     label: "How it works",
     href: "#how",
+    align: "left",
     tagline: "From PIN to report in three simple steps.",
     items: [
       { icon: IconKey, label: "Sign in with a PIN", blurb: "A valid PIN identifies the trainer — nothing to remember.", href: "#how" },
@@ -46,6 +48,7 @@ const NAV: Nav[] = [
   {
     label: "For teams",
     href: "#who",
+    align: "right",
     tagline: "One platform, every role at the institute.",
     items: [
       { icon: IconUsers, label: "Trainers", blurb: "A focused register for your assigned classes.", href: "#who" },
@@ -56,6 +59,7 @@ const NAV: Nav[] = [
   {
     label: "About",
     href: "#about",
+    align: "right",
     tagline: "Kenya Power's training arm since 1957.",
     items: [
       { icon: IconBuilding, label: "The Institute", blurb: "Building the engineers behind the national grid.", href: "#about" },
@@ -117,10 +121,10 @@ export function Navbar() {
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: 6, scale: 0.98 }}
                       transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
-                      className="absolute left-1/2 top-full z-50 mt-3 w-[26rem] -translate-x-1/2"
+                      className={`absolute top-full z-50 mt-3 w-[26rem] ${nav.align === "right" ? "right-0" : "left-0"}`}
                     >
-                      {/* little pointer */}
-                      <div className="absolute -top-1.5 left-1/2 h-3 w-3 -translate-x-1/2 rotate-45 rounded-sm border-l border-t border-slate-200 bg-white" />
+                      {/* little pointer — sits directly over the trigger link */}
+                      <div className={`absolute -top-1.5 h-3 w-3 rotate-45 rounded-sm border-l border-t border-slate-200 bg-white ${nav.align === "right" ? "right-8" : "left-8"}`} />
                       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-900/10">
                         <div className="border-b border-slate-100 bg-slate-50/80 px-5 py-3">
                           <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-kplc-blue">{nav.label}</p>
