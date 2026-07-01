@@ -4,12 +4,6 @@ import { Navbar } from "@/components/landing/Navbar";
 import { Hero } from "@/components/landing/Hero";
 import { Reveal } from "@/components/landing/Reveal";
 import { LiveStats } from "@/components/landing/LiveStats";
-import { SmoothScroll } from "@/components/landing/SmoothScroll";
-import { ScrollProgress } from "@/components/landing/ScrollProgress";
-import { MorphingBackground } from "@/components/landing/MorphingBackground";
-import { TiltCard } from "@/components/landing/TiltCard";
-import { HorizontalShowcase } from "@/components/landing/HorizontalShowcase";
-import { Counter } from "@/components/landing/Counter";
 import { getPublicStats, getPublicClasses } from "@/lib/data/public";
 
 export const dynamic = "force-dynamic"; // real, live stats every request
@@ -63,12 +57,6 @@ const PROGRAMMES = [
   { name: "Advanced Excel", tag: "Short course" },
 ];
 
-const STAKES = [
-  { to: 100, suffix: "%", label: "Cloud-backed", sub: "Every mark synced to Neon Postgres the instant it's saved — nothing lives on paper." },
-  { to: 5, suffix: "s", label: "To mark a class", sub: "Tap Present / Absent / Late down the roster — a full session logged in seconds." },
-  { to: 0, suffix: "", label: "Spreadsheets", sub: "No fragile workbooks, no version chaos. One live source of truth for the institute." },
-];
-
 export default async function LandingPage() {
   const [stats, classes] = await Promise.all([getPublicStats(), getPublicClasses()]);
   // Real, active cohorts from the database (code + name). Fall back to the
@@ -83,12 +71,7 @@ export default async function LandingPage() {
   const usingLiveClasses = cohorts.length > 0;
   const moreCount = Math.max(0, classes.length - cohorts.length);
   return (
-    <div className="relative overflow-x-hidden">
-      {/* premium scroll layer: smooth momentum, progress bar, morphing gradient */}
-      <SmoothScroll />
-      <ScrollProgress />
-      <MorphingBackground />
-
+    <div className="overflow-x-hidden bg-white">
       <Navbar />
       <Hero />
 
@@ -128,29 +111,27 @@ export default async function LandingPage() {
 
           <div className="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {FEATURES.map((f, i) => (
-              <Reveal key={f.title} delay={(i % 3) * 0.08} className="h-full">
-                <TiltCard className="h-full rounded-2xl">
-                  <div className="card relative flex h-full flex-col overflow-hidden p-6 transition-colors duration-300 hover:border-kplc-blue/30 hover:shadow-lg [transform:translateZ(30px)]">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-kplc-blue to-kplc-navy text-white transition-transform duration-300 group-hover:scale-110">
-                      <f.icon className="h-6 w-6" />
-                    </div>
-                    <h3 className="mt-4 text-lg font-semibold transition-colors group-hover:text-kplc-navy">{f.title}</h3>
-                    <p className="mt-2 text-sm leading-relaxed text-slate-600">{f.body}</p>
-
-                    {/* hover-revealed detail — slides open when the cursor passes over the card */}
-                    <div className="grid grid-rows-[0fr] opacity-0 transition-all duration-300 ease-out group-hover:grid-rows-[1fr] group-hover:opacity-100">
-                      <div className="overflow-hidden">
-                        <p className="mt-3 border-t border-slate-100 pt-3 text-sm leading-relaxed text-slate-500">{f.detail}</p>
-                        <span className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-kplc-blue">
-                          Learn more <IconArrow className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* accent underline on hover */}
-                    <span className="absolute inset-x-0 bottom-0 h-1 origin-left scale-x-0 bg-gradient-to-r from-kplc-blue via-kplc-green to-kplc-yellow transition-transform duration-300 group-hover:scale-x-100" />
+              <Reveal key={f.title} delay={(i % 3) * 0.08}>
+                <div className="group card relative h-full overflow-hidden p-6 transition duration-300 hover:-translate-y-1 hover:border-kplc-blue/30 hover:shadow-lg">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-kplc-blue to-kplc-navy text-white transition-transform duration-300 group-hover:scale-110">
+                    <f.icon className="h-6 w-6" />
                   </div>
-                </TiltCard>
+                  <h3 className="mt-4 text-lg font-semibold transition-colors group-hover:text-kplc-navy">{f.title}</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-slate-600">{f.body}</p>
+
+                  {/* hover-revealed detail — slides open when the cursor passes over the card */}
+                  <div className="grid grid-rows-[0fr] opacity-0 transition-all duration-300 ease-out group-hover:grid-rows-[1fr] group-hover:opacity-100">
+                    <div className="overflow-hidden">
+                      <p className="mt-3 border-t border-slate-100 pt-3 text-sm leading-relaxed text-slate-500">{f.detail}</p>
+                      <span className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-kplc-blue">
+                        Learn more <IconArrow className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* accent underline on hover */}
+                  <span className="absolute inset-x-0 bottom-0 h-1 origin-left scale-x-0 bg-gradient-to-r from-kplc-blue via-kplc-green to-kplc-yellow transition-transform duration-300 group-hover:scale-x-100" />
+                </div>
               </Reveal>
             ))}
           </div>
@@ -173,36 +154,22 @@ export default async function LandingPage() {
       </section>
 
       {/* showcase rows */}
-      <HorizontalShowcase eyebrow="A closer look" heading="From the field to the manager's screen" items={SHOWCASE} />
-
-      {/* sticky reveal — the stakes build as you scroll (Apple-style) */}
-      <section className="relative">
-        <div className="container-page grid gap-10 py-20 sm:py-28 lg:grid-cols-2">
-          <div className="lg:sticky lg:top-28 lg:h-fit">
-            <p className="eyebrow text-kplc-blue">Why it matters</p>
-            <h2 className="mt-3 text-3xl font-bold sm:text-5xl">Numbers leadership can trust</h2>
-            <p className="mt-4 text-lg leading-relaxed text-slate-600">
-              As you scroll, the picture builds — the same live truth the dashboard shows, one figure at a time.
-            </p>
-            <Link href="/login" className="btn-primary mt-8">
-              See it live <IconArrow className="h-4 w-4" />
-            </Link>
-          </div>
-          <div className="space-y-6">
-            {STAKES.map((s, i) => (
-              <Reveal key={s.label} delay={i * 0.05}>
-                <TiltCard className="rounded-3xl" max={5}>
-                  <div className="card flex items-center gap-6 p-8 [transform:translateZ(24px)]">
-                    <Counter to={s.to} suffix={s.suffix} className="font-display text-5xl font-extrabold text-kplc-navy sm:text-6xl" />
-                    <div>
-                      <p className="text-lg font-bold text-slate-900">{s.label}</p>
-                      <p className="mt-1 text-sm leading-relaxed text-slate-600">{s.sub}</p>
-                    </div>
-                  </div>
-                </TiltCard>
-              </Reveal>
-            ))}
-          </div>
+      <section className="py-20 sm:py-28">
+        <div className="container-page space-y-20 sm:space-y-28">
+          {SHOWCASE.map((s) => (
+            <Reveal key={s.title}>
+              <div className="grid items-center gap-10 lg:grid-cols-2">
+                <div className={`relative aspect-[4/3] overflow-hidden rounded-3xl shadow-soft ${s.reverse ? "lg:order-2" : ""}`}>
+                  <Image src={s.img} alt={s.title} fill sizes="(max-width:1024px) 100vw, 50vw" className="object-cover" />
+                </div>
+                <div className={s.reverse ? "lg:order-1" : ""}>
+                  <p className="eyebrow text-kplc-blue">{s.eyebrow}</p>
+                  <h3 className="mt-3 text-3xl font-bold sm:text-4xl">{s.title}</h3>
+                  <p className="mt-4 text-lg leading-relaxed text-slate-600">{s.body}</p>
+                </div>
+              </div>
+            </Reveal>
+          ))}
         </div>
       </section>
 
