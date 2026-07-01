@@ -27,7 +27,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
       {/* content sits above the backdrop */}
       <div className="relative z-10">
-        <AdminHeader name={session.name} registerName={settings.registerName} period={period} />
+        <AdminHeader registerName={settings.registerName} period={period} />
         <main className="container-page py-6 sm:py-8">{children}</main>
       </div>
     </div>

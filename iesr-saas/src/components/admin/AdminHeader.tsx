@@ -23,7 +23,7 @@ const NAV: NavItem[] = [
   { href: "/admin/settings", label: "Settings" },
 ];
 
-export function AdminHeader({ name, registerName = "IESR Register", period = "" }: { name: string; registerName?: string; period?: string }) {
+export function AdminHeader({ registerName = "IESR Register", period = "" }: { registerName?: string; period?: string }) {
   const pathname = usePathname();
   const router = useRouter();
   const [unread, setUnread] = useState(0);

@@ -137,7 +137,7 @@ export async function buildRegisterGridXlsx(rows: AnalyticsRow[], meta: XlsxMeta
       base.push(s.present, s.absent, s.late, `${s.rate}%`);
       row.values = base;
       // colour the status cells
-      c.columns.forEach((col, ci) => {
+      c.columns.forEach((_col, ci) => {
         const cell = row.getCell(4 + ci);
         const v = String(cell.value ?? "");
         cell.alignment = { horizontal: "center" };

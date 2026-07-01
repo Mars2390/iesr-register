@@ -650,7 +650,8 @@ export function computeRegisterGrid(rows: AnalyticsRow[]): RegisterGridClass[] {
   for (const r of rows) {
     const c = (classes[r.classCode] ??= { classCode: r.classCode, displayName: r.classDisplayName, category: r.classCategory, cols: new Map(), students: {} });
     const key = `${r.date}#${r.sessionId}`;
-    if (!c.cols.has(key)) c.cols.set(key, { key, date: r.date, sessionId: r.sessionId, label: gridLabel(r.date, r.sessionId) });
+    // label is assigned below (per-date, with S1/S2… when a day has >1 session)
+    if (!c.cols.has(key)) c.cols.set(key, { key, date: r.date, sessionId: r.sessionId, label: "" });
     const s = (c.students[r.admNo] ??= { admNo: r.admNo, name: r.name, cells: {}, present: 0, absent: 0, late: 0, marked: 0 });
     s.cells[key] = LETTER[r.status];
     if (r.status === "present") { s.present++; s.marked++; }
@@ -692,8 +693,6 @@ function dayDateLabel(iso: string): string {
   const wd = DAY3[new Date(Date.UTC(y, (m ?? 1) - 1, d ?? 1)).getUTCDay()];
   return `${wd} ${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}`;
 }
-/** initial column label (refined per-day inside computeRegisterGrid). */
-function gridLabel(iso: string, _sessionId: string): string { return dayDateLabel(iso); }
 
 /* ------------------------------------------------- leadership brief */
 export interface LeadershipSummary {
