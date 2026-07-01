@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useInView } from "framer-motion";
 
-/** Animated count-up (Rajdhani via font-display), runs once when scrolled into view. */
+/** Animated count-up (Plus Jakarta Sans via font-display), runs once when scrolled into view. */
 export function Counter({
   to, suffix = "", prefix = "", duration = 1.6, className,
 }: {

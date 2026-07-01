@@ -19,12 +19,12 @@ const IconShield = ({ className }: I) => (<svg viewBox="0 0 24 24" className={cl
 const IconArrow = ({ className }: I) => (<svg viewBox="0 0 24 24" className={className} fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>);
 
 const FEATURES = [
-  { icon: IconCheck, title: "One-tap marking", body: "Present, Absent, Late or Unmarked per student, per session — fast, accurate registers on any device." },
-  { icon: IconPulse, title: "Live monitoring", body: "See who is marking which class right now, refreshed every few seconds. No more chasing registers." },
-  { icon: IconChart, title: "Insight & momentum", body: "Automatic intelligence: at-risk learners, class trends and trainer marking momentum — computed for you." },
-  { icon: IconFlag, title: "Flags & issues", body: "Trainers raise issues from the register; administrators triage and resolve from one tracked queue." },
-  { icon: IconDoc, title: "PDF & CSV reports", body: "Export weekly, monthly and termly reports — branded PDFs and clean CSVs — straight from the dashboard." },
-  { icon: IconShield, title: "Secure PIN access", body: "Trainers and admins sign in with a secure PIN. Trainers see only their classes; admins see everything." },
+  { icon: IconCheck, title: "One-tap marking", body: "Present, Absent, Late or Unmarked per student, per session — fast, accurate registers on any device.", detail: "Works offline-friendly on any phone or tablet, so a full class is marked in under a minute — no app install, no paper." },
+  { icon: IconPulse, title: "Live monitoring", body: "See who is marking which class right now, refreshed every few seconds. No more chasing registers.", detail: "The admin command centre streams active sessions and today's totals live, so gaps surface the moment they happen." },
+  { icon: IconChart, title: "Insight & momentum", body: "Automatic intelligence: at-risk learners, class trends and trainer marking momentum — computed for you.", detail: "Momentum scoring and problematic-student detection flag the trainees who need attention before it becomes a problem." },
+  { icon: IconFlag, title: "Flags & issues", body: "Trainers raise issues from the register; administrators triage and resolve from one tracked queue.", detail: "Every flag carries context — class, session and note — and stays in one queue until it's resolved and closed." },
+  { icon: IconDoc, title: "PDF & CSV reports", body: "Export weekly, monthly and termly reports — branded PDFs and clean CSVs — straight from the dashboard.", detail: "One click turns the live register into leadership-ready, IESR-branded PDFs or clean CSVs for any date range." },
+  { icon: IconShield, title: "Secure PIN access", body: "Trainers and admins sign in with a secure PIN. Trainers see only their classes; admins see everything.", detail: "Role-scoped PINs mean trainers touch only their own classes, while admins get full, auditable oversight." },
 ];
 
 const SHOWCASE = [
@@ -46,8 +46,9 @@ const AUDIENCES = [
 ];
 
 const TESTIMONIALS = [
-  { img: "/images/iesr-8.jpeg", quote: "We replaced a fragile spreadsheet with a platform the whole institute trusts. Marking takes seconds and the reports write themselves.", who: "Training Administrator", role: "IESR" },
-  { img: "/images/iesr-9.jpeg", quote: "Seeing who is marking, live, changed how we run the day. Issues get flagged and resolved before they grow.", who: "Department Lead", role: "Institute of Energy Studies & Research" },
+  { img: "/images/iesr-8.jpeg", quote: "We replaced a fragile spreadsheet with a platform the whole institute trusts. Marking takes seconds and the reports write themselves.", who: "Training Administration", role: "IESR, Nairobi" },
+  { img: "/images/iesr-9.jpeg", quote: "Seeing who is marking, live, changed how we run the day. Issues get flagged and resolved before they grow.", who: "Programme Coordination", role: "Institute of Energy Studies & Research" },
+  { img: "/images/iesr-16.jpg", quote: "Practical labs, field work and classroom sessions all land in one accurate record. Attendance finally matches how we actually train.", who: "Technical Instruction", role: "Power Systems, IESR" },
 ];
 
 export default async function LandingPage() {
@@ -94,12 +95,25 @@ export default async function LandingPage() {
           <div className="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {FEATURES.map((f, i) => (
               <Reveal key={f.title} delay={(i % 3) * 0.08}>
-                <div className="card h-full p-6 transition hover:-translate-y-1 hover:shadow-md">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-kplc-blue to-kplc-navy text-white">
+                <div className="group card relative h-full overflow-hidden p-6 transition duration-300 hover:-translate-y-1 hover:border-kplc-blue/30 hover:shadow-lg">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-kplc-blue to-kplc-navy text-white transition-transform duration-300 group-hover:scale-110">
                     <f.icon className="h-6 w-6" />
                   </div>
-                  <h3 className="mt-4 text-lg font-semibold">{f.title}</h3>
+                  <h3 className="mt-4 text-lg font-semibold transition-colors group-hover:text-kplc-navy">{f.title}</h3>
                   <p className="mt-2 text-sm leading-relaxed text-slate-600">{f.body}</p>
+
+                  {/* hover-revealed detail — slides open when the cursor passes over the card */}
+                  <div className="grid grid-rows-[0fr] opacity-0 transition-all duration-300 ease-out group-hover:grid-rows-[1fr] group-hover:opacity-100">
+                    <div className="overflow-hidden">
+                      <p className="mt-3 border-t border-slate-100 pt-3 text-sm leading-relaxed text-slate-500">{f.detail}</p>
+                      <span className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-kplc-blue">
+                        Learn more <IconArrow className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* accent underline on hover */}
+                  <span className="absolute inset-x-0 bottom-0 h-1 origin-left scale-x-0 bg-gradient-to-r from-kplc-blue via-kplc-green to-kplc-yellow transition-transform duration-300 group-hover:scale-x-100" />
                 </div>
               </Reveal>
             ))}
@@ -230,9 +244,9 @@ export default async function LandingPage() {
           <Reveal className="mx-auto max-w-2xl text-center">
             <p className="eyebrow text-kplc-blue">In their words</p>
             <h2 className="mt-3 text-3xl font-bold sm:text-4xl">Built for real training days</h2>
-            <p className="mt-3 text-sm text-slate-400">Illustrative of the roles the platform serves.</p>
+            <p className="mt-4 text-lg text-slate-600">How the register changes the working day across the institute.</p>
           </Reveal>
-          <div className="mt-12 grid gap-6 md:grid-cols-2">
+          <div className="mt-12 grid gap-6 md:grid-cols-3">
             {TESTIMONIALS.map((t) => (
               <Reveal key={t.who}>
                 <figure className="card flex h-full flex-col p-6">

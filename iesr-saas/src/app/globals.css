@@ -9,10 +9,19 @@
   body {
     @apply bg-slate-50 text-slate-700 antialiased;
     font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+    /* KPLC-Sight-style optical polish: kern, ligatures, crisp rendering */
+    font-feature-settings: "cv11", "ss01";
+    letter-spacing: -0.005em;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
   h1, h2, h3, h4 {
-    @apply font-semibold tracking-tight text-slate-900;
+    font-family: var(--font-display), var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+    @apply font-bold tracking-tight text-slate-900;
+    letter-spacing: -0.02em;
   }
+  h1 { letter-spacing: -0.035em; }
 }
 
 /* ----- reusable design-system primitives (reused by login + dashboards) ----- */
@@ -23,8 +32,9 @@
 
   .btn {
     @apply inline-flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold
-           transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40
-           disabled:pointer-events-none disabled:opacity-50;
+           transition-[color,background-color,border-color,box-shadow,transform] duration-200 ease-out
+           focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40
+           active:translate-y-px disabled:pointer-events-none disabled:opacity-50;
   }
   .btn-primary  { @apply btn bg-kplc-navy text-white shadow-sm hover:bg-kplc-blue; }
   .btn-accent   { @apply btn bg-kplc-yellow text-kplc-navy shadow-sm hover:brightness-95; }
@@ -35,7 +45,7 @@
   .btn-muted    { @apply inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-100 px-3 py-2
                          text-sm font-medium text-slate-700 transition-colors hover:bg-slate-200 disabled:pointer-events-none; }
 
-  .card { @apply rounded-2xl border border-slate-200 bg-white shadow-soft; }
+  .card { @apply rounded-2xl border border-slate-200 bg-white shadow-soft transition-[box-shadow,border-color,transform] duration-200 ease-out; }
 
   .badge {
     @apply inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white/70
@@ -48,6 +58,7 @@
 
   .input {
     @apply w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900
+           transition-colors duration-150 hover:border-slate-300
            placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30;
   }
 

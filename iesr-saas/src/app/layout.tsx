@@ -1,18 +1,20 @@
 import type { Metadata, Viewport } from "next";
-import { Exo_2, Rajdhani } from "next/font/google";
+import { Inter, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 
 // Self-hosted at build time by next/font (no runtime CDN, no layout shift).
-// Replaces the legacy Google Fonts <link>. Fetched once during `next build`.
-const sans = Exo_2({
+// Fetched once during `next build`. Inter (body) + Plus Jakarta Sans (display)
+// give the clean, professional SaaS look of the KPLC Sight reference — a warm,
+// humanist grotesque instead of the old technical/condensed pairing.
+const sans = Inter({
   subsets: ["latin"],
-  weight: ["300", "400", "600", "700", "800"],
+  weight: ["400", "500", "600", "700", "800"],
   variable: "--font-sans",
   display: "swap",
 });
-const display = Rajdhani({
+const display = Plus_Jakarta_Sans({
   subsets: ["latin"],
-  weight: ["500", "600", "700"],
+  weight: ["500", "600", "700", "800"],
   variable: "--font-display",
   display: "swap",
 });
