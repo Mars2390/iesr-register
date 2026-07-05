@@ -4,6 +4,8 @@ import { Navbar } from "@/components/landing/Navbar";
 import { Hero } from "@/components/landing/Hero";
 import { Reveal } from "@/components/landing/Reveal";
 import { LiveStats } from "@/components/landing/LiveStats";
+import { Marquee } from "@/components/landing/Marquee";
+import { RoleSwitcher } from "@/components/landing/RoleSwitcher";
 import { getPublicStats, getPublicClasses } from "@/lib/data/public";
 
 export const dynamic = "force-dynamic"; // real, live stats every request
@@ -38,12 +40,6 @@ const STEPS = [
   { n: "01", t: "Sign in with a PIN", d: "No usernames to remember. A valid PIN identifies the trainer; the admin PIN unlocks full control." },
   { n: "02", t: "Mark the register", d: "Pick the day and session, tap statuses, add notes, and submit — synced to the cloud instantly." },
   { n: "03", t: "Monitor & report", d: "Admins watch attendance live, triage flags, and export the reports leadership needs." },
-];
-
-const AUDIENCES = [
-  { img: "/images/iesr-2.jpg", role: "Trainers", body: "A focused register for your assigned classes — mark fast, raise issues, review your own history." },
-  { img: "/images/iesr-13.jpg", role: "Administrators", body: "A live command centre: monitor marking, manage classes & trainees, triage flags, export reports." },
-  { img: "/images/iesr-10.jpg", role: "Parents & sponsors", body: "Clear visibility into a trainee's attendance and engagement — present, absent and late at a glance." },
 ];
 
 // Real IESR programmes — the actual diploma cohorts and short courses the
@@ -186,6 +182,9 @@ export default async function LandingPage() {
         </div>
       </section>
 
+      {/* premium drifting gallery — Kenya Power on the ground */}
+      <Marquee />
+
       {/* how it works */}
       <section id="how" className="bg-slate-50 py-20 sm:py-28">
         <div className="container-page">
@@ -207,29 +206,8 @@ export default async function LandingPage() {
         </div>
       </section>
 
-      {/* who is it for */}
-      <section id="who" className="py-20 sm:py-28">
-        <div className="container-page">
-          <Reveal className="mx-auto max-w-2xl text-center">
-            <p className="eyebrow text-kplc-green">For everyone</p>
-            <h2 className="mt-3 text-3xl font-bold sm:text-4xl">One platform, every role</h2>
-          </Reveal>
-          <div className="mt-14 grid gap-6 md:grid-cols-3">
-            {AUDIENCES.map((a, i) => (
-              <Reveal key={a.role} delay={i * 0.08}>
-                <div className="group overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-soft transition hover:-translate-y-1 hover:shadow-md">
-                  <div className="relative aspect-[4/3] overflow-hidden">
-                    <Image src={a.img} alt={a.role} fill sizes="(max-width:768px) 100vw, 33vw" className="object-cover transition duration-500 group-hover:scale-105" />
-                    <div className="absolute inset-0 bg-gradient-to-t from-kplc-navy/80 to-transparent" />
-                    <h3 className="absolute bottom-4 left-5 text-xl font-bold text-white">{a.role}</h3>
-                  </div>
-                  <p className="p-5 text-sm leading-relaxed text-slate-600">{a.body}</p>
-                </div>
-              </Reveal>
-            ))}
-          </div>
-        </div>
-      </section>
+      {/* who is it for — tabbed role switcher */}
+      <RoleSwitcher />
 
       {/* about / brand */}
       <section id="about" className="bg-kplc-navy py-20 text-white sm:py-28">
