@@ -21,7 +21,7 @@ const ROLES: Role[] = [
   {
     key: "Administrators",
     tagline: "A live command centre for the institute",
-    img: "/images/iesr-13.jpg",
+    img: "/images/iesr-6.jpg",
     points: [
       "Watch marking land in real time, class by class.",
       "Manage classes, trainees and timetables in one place.",
@@ -31,7 +31,7 @@ const ROLES: Role[] = [
   {
     key: "Leadership",
     tagline: "Decisions backed by real attendance data",
-    img: "/images/iesr-15.jpg",
+    img: "/images/iesr-9.jpg",
     points: [
       "School-wide attendance and class rankings at a glance.",
       "Top & at-risk students, unit performance, teacher compliance.",

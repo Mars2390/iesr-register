@@ -4,7 +4,7 @@ import { Navbar } from "@/components/landing/Navbar";
 import { Hero } from "@/components/landing/Hero";
 import { Reveal } from "@/components/landing/Reveal";
 import { LiveStats } from "@/components/landing/LiveStats";
-import { Marquee } from "@/components/landing/Marquee";
+import { Gallery } from "@/components/landing/Gallery";
 import { RoleSwitcher } from "@/components/landing/RoleSwitcher";
 import { getPublicStats, getPublicClasses } from "@/lib/data/public";
 
@@ -19,7 +19,6 @@ const IconFlag = ({ className }: I) => (<svg viewBox="0 0 24 24" className={clas
 const IconDoc = ({ className }: I) => (<svg viewBox="0 0 24 24" className={className} fill="none"><path d="M7 3h7l5 5v13H7zM14 3v5h5M9 13h6M9 17h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>);
 const IconShield = ({ className }: I) => (<svg viewBox="0 0 24 24" className={className} fill="none"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" /></svg>);
 const IconArrow = ({ className }: I) => (<svg viewBox="0 0 24 24" className={className} fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>);
-const IconBolt = ({ className }: I) => (<svg viewBox="0 0 24 24" className={className} fill="none"><path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>);
 
 const FEATURES = [
   { icon: IconCheck, title: "One-tap marking", body: "Present, Absent, Late or Unmarked per student, per session — fast, accurate registers on any device.", detail: "Works offline-friendly on any phone or tablet, so a full class is marked in under a minute — no app install, no paper." },
@@ -182,8 +181,8 @@ export default async function LandingPage() {
         </div>
       </section>
 
-      {/* premium drifting gallery — Kenya Power on the ground */}
-      <Marquee />
+      {/* premium image gallery — IESR on the ground */}
+      <Gallery />
 
       {/* how it works */}
       <section id="how" className="bg-slate-50 py-20 sm:py-28">
@@ -252,8 +251,9 @@ export default async function LandingPage() {
             {programmes.map((p, i) => (
               <Reveal key={`${p.tag}-${p.name}`} delay={(i % 3) * 0.06}>
                 <div className="group card flex h-full items-center gap-4 p-5 hover:-translate-y-0.5 hover:border-kplc-blue/30 hover:shadow-md">
-                  <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-kplc-blue to-kplc-navy text-white transition-transform duration-300 group-hover:scale-110">
-                    <IconBolt className="h-5 w-5" />
+                  {/* one consistent IESR mark on every class card */}
+                  <span className="relative h-11 w-11 shrink-0 overflow-hidden rounded-xl ring-1 ring-slate-200 transition-transform duration-300 group-hover:scale-110">
+                    <Image src="/images/iesr-4.jpg" alt="IESR" fill sizes="44px" className="object-cover" />
                   </span>
                   <div className="min-w-0">
                     <p className="truncate text-[15px] font-semibold leading-snug text-slate-800 group-hover:text-kplc-navy" title={p.name}>{p.name}</p>

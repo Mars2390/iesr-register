@@ -87,23 +87,7 @@
       radial-gradient(40% 40% at 85% 10%, rgba(0, 200, 255, 0.10), rgba(255, 255, 255, 0) 70%);
   }
 
-  /* fade the marquee edges so cards drift in/out softly */
-  .marquee-mask {
-    -webkit-mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
-            mask-image: linear-gradient(90deg, transparent, #000 6%, #000 94%, transparent);
-  }
-}
-
-/* continuously-drifting gallery strip (two copies translate -50% for a seamless loop) */
-@keyframes marquee-x {
-  from { transform: translateX(0); }
-  to   { transform: translateX(-100%); }
-}
-.animate-marquee {
-  animation: marquee-x 48s linear infinite;
-  will-change: transform;
-}
-.marquee-mask:hover .animate-marquee { animation-play-state: paused; }
-@media (prefers-reduced-motion: reduce) {
-  .animate-marquee { animation: none; }
+  /* hide the native scrollbar on the image gallery (arrows + dots drive it) */
+  .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+  .scrollbar-hide::-webkit-scrollbar { display: none; }
 }
