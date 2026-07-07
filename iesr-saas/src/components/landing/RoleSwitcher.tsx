@@ -31,7 +31,7 @@ const ROLES: Role[] = [
   {
     key: "Leadership",
     tagline: "Decisions backed by real attendance data",
-    img: "/images/iesr-9.jpg",
+    img: "/images/iesr-9.jpeg",
     points: [
       "School-wide attendance and class rankings at a glance.",
       "Top & at-risk students, unit performance, teacher compliance.",
@@ -44,9 +44,11 @@ const IconCheck = ({ className }: { className?: string }) => (
   <svg viewBox="0 0 24 24" className={className} fill="none"><path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
 );
 
-export function RoleSwitcher() {
+export function RoleSwitcher({ adminImg }: { adminImg?: string }) {
   const [active, setActive] = useState(0);
-  const role = ROLES[active];
+  // when a real admin-dashboard screenshot is available, use it for the Administrators tab
+  const roles = adminImg ? ROLES.map((r) => (r.key === "Administrators" ? { ...r, img: adminImg } : r)) : ROLES;
+  const role = roles[active];
 
   return (
     <section id="who" className="bg-slate-50 py-20 sm:py-28">
@@ -59,7 +61,7 @@ export function RoleSwitcher() {
 
         {/* pill tabs */}
         <div className="mt-10 flex flex-wrap justify-center gap-2">
-          {ROLES.map((r, i) => (
+          {roles.map((r, i) => (
             <button
               key={r.key}
               onClick={() => setActive(i)}
@@ -84,7 +86,7 @@ export function RoleSwitcher() {
               className="grid items-center gap-8 rounded-3xl border border-slate-200 bg-white p-4 shadow-soft lg:grid-cols-2 lg:p-6"
             >
               <div className="relative aspect-[4/3] overflow-hidden rounded-2xl">
-                <Image src={role.img} alt={role.key} fill sizes="(max-width:1024px) 100vw, 50vw" className="object-cover" />
+                <Image src={role.img} alt={role.key} fill sizes="(max-width:1024px) 100vw, 50vw" className={`object-cover ${role.key === "Administrators" ? "object-top" : ""}`} />
                 <div className="absolute inset-0 bg-gradient-to-t from-kplc-navy/50 to-transparent" />
                 <span className="absolute bottom-4 left-4 rounded-full bg-white/90 px-3 py-1 text-xs font-bold uppercase tracking-wide text-kplc-navy backdrop-blur">{role.key}</span>
               </div>

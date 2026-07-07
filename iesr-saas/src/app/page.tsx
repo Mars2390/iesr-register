@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import Link from "next/link";
 import Image from "next/image";
 import { Navbar } from "@/components/landing/Navbar";
@@ -52,19 +54,28 @@ const PROGRAMMES = [
   { name: "Advanced Excel", tag: "Short course" },
 ];
 
+// Screenshots dropped into /public/images/screenshots/ light up automatically.
+// Checked per request (page is force-dynamic) with a graceful fallback, so a
+// missing file never renders as a broken image.
+const SHOTS_DIR = join(process.cwd(), "public", "images", "screenshots");
+const shotUrl = (file: string): string | null =>
+  existsSync(join(SHOTS_DIR, file)) ? `/images/screenshots/${file}` : null;
+const codeToShot = (code: string): string | null =>
+  shotUrl(code.replace(/[^a-zA-Z0-9]+/g, "-") + ".png");
+
 export default async function LandingPage() {
   const [stats, classes] = await Promise.all([getPublicStats(), getPublicClasses()]);
-  // Real, active cohorts from the database (code + name). Fall back to the
-  // static programme list only if the register has no classes yet.
-  // displayName is stored as "CODE (Programme name)" — surface the readable
-  // programme as the title and the class code as the tag (no duplicate code).
-  const cohorts = classes.slice(0, 9).map((c) => {
+  // ALL active cohorts from the database — a newly-added class appears here
+  // automatically. displayName is "CODE (Programme name)": surface the readable
+  // programme as the title, the class code as the tag, plus any register screenshot.
+  const cohorts = classes.map((c) => {
     const m = c.displayName.match(/\(([^)]+)\)\s*$/);
-    return { name: m ? m[1].trim() : c.displayName, tag: c.code };
+    return { name: m ? m[1].trim() : c.displayName, tag: c.code, shot: codeToShot(c.code) };
   });
-  const programmes = cohorts.length ? cohorts : PROGRAMMES;
   const usingLiveClasses = cohorts.length > 0;
-  const moreCount = Math.max(0, classes.length - cohorts.length);
+  const programmes = usingLiveClasses ? cohorts : PROGRAMMES.map((p) => ({ ...p, shot: null as string | null }));
+  // real admin-dashboard screenshot when available, else a fitting stock image
+  const adminShot = shotUrl("admin-dashboard.png") ?? "/images/iesr-6.jpg";
   return (
     <div className="overflow-x-hidden bg-white">
       <Navbar />
@@ -206,7 +217,7 @@ export default async function LandingPage() {
       </section>
 
       {/* who is it for — tabbed role switcher */}
-      <RoleSwitcher />
+      <RoleSwitcher adminImg={adminShot} />
 
       {/* about / brand */}
       <section id="about" className="bg-kplc-navy py-20 text-white sm:py-28">
@@ -247,17 +258,36 @@ export default async function LandingPage() {
             </p>
           </Reveal>
 
-          <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
             {programmes.map((p, i) => (
               <Reveal key={`${p.tag}-${p.name}`} delay={(i % 3) * 0.06}>
-                <div className="group card flex h-full items-center gap-4 p-5 hover:-translate-y-0.5 hover:border-kplc-blue/30 hover:shadow-md">
-                  {/* one consistent IESR mark on every class card */}
-                  <span className="relative h-11 w-11 shrink-0 overflow-hidden rounded-xl ring-1 ring-slate-200 transition-transform duration-300 group-hover:scale-110">
-                    <Image src="/images/iesr-4.jpg" alt="IESR" fill sizes="44px" className="object-cover" />
-                  </span>
-                  <div className="min-w-0">
-                    <p className="truncate text-[15px] font-semibold leading-snug text-slate-800 group-hover:text-kplc-navy" title={p.name}>{p.name}</p>
-                    <p className="mt-0.5 truncate text-xs font-semibold uppercase tracking-wide text-kplc-blue" title={p.tag}>{p.tag}</p>
+                <div className="group card h-full overflow-hidden transition hover:-translate-y-1 hover:border-kplc-blue/30 hover:shadow-lg">
+                  {/* preview: real register screenshot when available, else a branded IESR panel */}
+                  <div className="relative aspect-[16/10] overflow-hidden border-b border-slate-100">
+                    {p.shot ? (
+                      <>
+                        <Image src={p.shot} alt={`${p.tag} register`} fill sizes="(max-width:1024px) 100vw, 33vw" className="object-cover object-top transition duration-500 group-hover:scale-[1.03]" />
+                        {/* browser-chrome flourish so it reads as a live screenshot */}
+                        <div className="absolute left-3 top-3 flex gap-1.5">
+                          <span className="h-2 w-2 rounded-full bg-white/70" />
+                          <span className="h-2 w-2 rounded-full bg-white/70" />
+                          <span className="h-2 w-2 rounded-full bg-white/70" />
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex h-full items-center justify-center bg-gradient-to-br from-kplc-navy to-kplc-blue">
+                        <span className="relative h-16 w-16 overflow-hidden rounded-2xl ring-2 ring-white/25">
+                          <Image src="/images/iesr-4.jpg" alt="IESR" fill sizes="64px" className="object-cover" />
+                        </span>
+                      </div>
+                    )}
+                    <span className="absolute right-3 top-3 rounded-full bg-white/90 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-kplc-navy backdrop-blur">{p.tag}</span>
+                  </div>
+                  <div className="flex items-center gap-3 p-5">
+                    <span className="relative h-9 w-9 shrink-0 overflow-hidden rounded-lg ring-1 ring-slate-200">
+                      <Image src="/images/iesr-4.jpg" alt="IESR" fill sizes="36px" className="object-cover" />
+                    </span>
+                    <p className="min-w-0 truncate text-[15px] font-semibold leading-snug text-slate-800 group-hover:text-kplc-navy" title={p.name}>{p.name}</p>
                   </div>
                 </div>
               </Reveal>
@@ -266,7 +296,7 @@ export default async function LandingPage() {
 
           <Reveal className="mt-10 text-center">
             <p className="text-sm text-slate-500">
-              {moreCount > 0 && <span className="font-semibold text-slate-700">+{moreCount} more active {moreCount === 1 ? "class" : "classes"} · </span>}
+              {usingLiveClasses && <span className="font-semibold text-slate-700">{programmes.length} active {programmes.length === 1 ? "cohort" : "cohorts"} · </span>}
               Institute of Energy Studies &amp; Research · Kenya Power&apos;s training arm since <span className="font-semibold text-slate-700">1957</span>
             </p>
           </Reveal>
