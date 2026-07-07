@@ -63,8 +63,10 @@ export function AnalyticsDashboard({
   const d = data;
   const trend = useMemo(() => d.weeklyTrend.map((w) => ({ label: dm(w.week), value: w.rate })), [d.weeklyTrend]);
   const compliance = useMemo(() => {
-    // Marking compliance ≈ active teachers who recorded marks in range / total teachers.
-    const active = new Set(d.teacherConsistency.top.concat(d.teacherConsistency.bottom).map((t) => t.teacher)).size;
+    // Marking compliance = teachers who recorded marks in range / total teachers.
+    // Uses the server's full active-marker count (not the truncated top/bottom slices),
+    // so it stays accurate when more than 10 teachers have marked.
+    const active = d.activeMarkers ?? new Set(d.teacherConsistency.top.concat(d.teacherConsistency.bottom).map((t) => t.teacher)).size;
     return d.counts.teachers ? Math.round((active / d.counts.teachers) * 100) : 0;
   }, [d]);
 

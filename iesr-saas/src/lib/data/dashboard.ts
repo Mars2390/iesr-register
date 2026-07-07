@@ -35,6 +35,9 @@ export async function getDashboardData(session: SessionPayload, filters: ReportF
     byClass: insights.byClass,
     subjects: topAndBottomSubjects(rows, 5),
     dayPattern: computeDayPattern(rows),
+    // full count of teachers who recorded any mark in range (computeTeacherConsistency
+    // only includes teachers with marks) — drives an accurate marking-compliance %.
+    activeMarkers: teachers.length,
     teacherConsistency: { top: teachers.slice(0, 5), bottom: teachers.slice().reverse().slice(0, 5) },
     risk,
     atRiskStudents: studentAnalytics.filter((s) => s.band !== "Good").slice(0, 12),

@@ -58,7 +58,11 @@ export default function LoginPage() {
       router.replace(dest); router.refresh();
     } catch (e) {
       const code = e instanceof Error ? e.message : "";
-      setError(code === "invalid_pin" ? "Incorrect PIN. Please try again." : "Could not sign in. Please try again.");
+      setError(
+        code === "invalid_pin" ? "Incorrect PIN. Please try again."
+          : code === "too_many_attempts" ? "Too many attempts. Please wait a few minutes and try again."
+          : "Could not sign in. Please try again.",
+      );
       setSubmitting(false);
     }
   }
