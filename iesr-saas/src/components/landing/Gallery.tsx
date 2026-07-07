@@ -90,6 +90,7 @@ export function Gallery() {
         onMouseEnter={() => (pausedRef.current = true)}
         onMouseLeave={() => (pausedRef.current = false)}
         onTouchStart={() => (pausedRef.current = true)}
+        onTouchEnd={() => (pausedRef.current = false)}
         className="scrollbar-hide relative z-10 mt-12 flex snap-x snap-mandatory items-center gap-6 overflow-x-auto scroll-smooth px-[calc(50vw-11rem)] py-6 sm:px-[calc(50vw-13rem)]"
       >
         {SHOTS.map((s, i) => {
