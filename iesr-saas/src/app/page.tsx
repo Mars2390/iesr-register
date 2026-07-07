@@ -8,6 +8,7 @@ import { Reveal } from "@/components/landing/Reveal";
 import { LiveStats } from "@/components/landing/LiveStats";
 import { Gallery } from "@/components/landing/Gallery";
 import { RoleSwitcher } from "@/components/landing/RoleSwitcher";
+import { Showcase } from "@/components/landing/Showcase";
 import { getPublicStats, getPublicClasses } from "@/lib/data/public";
 
 export const dynamic = "force-dynamic"; // real, live stats every request
@@ -62,6 +63,13 @@ const shotUrl = (file: string): string | null =>
   existsSync(join(SHOTS_DIR, file)) ? `/images/screenshots/${file}` : null;
 const codeToShot = (code: string): string | null =>
   shotUrl(code.replace(/[^a-zA-Z0-9]+/g, "-") + ".png");
+// first available marking/demo video (drop one in to make the showcase play it)
+const videoUrl = (): string | null => {
+  for (const f of ["marking.mp4", "demo.mp4", "marking.webm", "demo.webm"]) {
+    if (existsSync(join(SHOTS_DIR, f))) return `/images/screenshots/${f}`;
+  }
+  return null;
+};
 
 export default async function LandingPage() {
   const [stats, classes] = await Promise.all([getPublicStats(), getPublicClasses()]);
@@ -76,6 +84,11 @@ export default async function LandingPage() {
   const programmes = usingLiveClasses ? cohorts : PROGRAMMES.map((p) => ({ ...p, shot: null as string | null }));
   // real admin-dashboard screenshot when available, else a fitting stock image
   const adminShot = shotUrl("admin-dashboard.png") ?? "/images/iesr-6.jpg";
+  // "See the system in action" assets — real screenshots/video only (null-safe).
+  const demoVideo = videoUrl();
+  const adminReal = shotUrl("admin-dashboard.png");
+  const firstClassShot = cohorts.find((c) => c.shot)?.shot ?? null;
+  const teacherReal = shotUrl("teacher-register.png") ?? firstClassShot;
   return (
     <div className="overflow-x-hidden bg-white">
       <Navbar />
@@ -158,6 +171,9 @@ export default async function LandingPage() {
           </Reveal>
         </div>
       </section>
+
+      {/* see the system in action — browser-framed real screenshots / video */}
+      <Showcase video={demoVideo} adminShot={adminReal} teacherShot={teacherReal} />
 
       {/* showcase rows */}
       <section className="py-20 sm:py-28">

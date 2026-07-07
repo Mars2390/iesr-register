@@ -32,3 +32,15 @@ When you add a **new class** in Admin, it automatically appears as a cohort card
 after its code using the same rule above.
 
 Tip: keep files reasonably small (≤ ~400 KB each) so the page stays fast.
+
+## "See the system in action" showcase
+
+| Save as | What it does |
+|---|---|
+| `admin-dashboard.png` | Left frame — admin dashboard (same file as above) |
+| `teacher-register.png` | Right frame — a trainer's marking grid. **Optional:** if absent, the first class screenshot you added is used automatically. |
+| `marking.mp4` (or `demo.mp4`, `.webm`) | A screen-recording of marking a register. **If present it replaces the two frames** and plays as a muted, looping video (Zoom-style). |
+
+To make the marking video: screen-record yourself marking a class (Present /
+Absent / Late) for ~15–30s, export as MP4 (≤ ~5 MB, 720p is plenty), and save it
+as `marking.mp4` here. It will autoplay, muted and looping, in a browser frame.
