@@ -71,39 +71,37 @@ export function Showcase({ video, adminShot, teacherShot }: Props) {
           </p>
         </div>
 
-        {video ? (
+        {/* hero: the live marking recording (when present) */}
+        {video && (
           <div className="mx-auto mt-12 max-w-4xl">
-            <BrowserFrame address="iesr-register.vercel.app">
+            <BrowserFrame address="iesr-register.vercel.app/teacher">
               {/* muted autoplay loop — motion on content, no controls chrome */}
-              <video
-                className="block w-full"
-                autoPlay
-                muted
-                loop
-                playsInline
-                poster={adminShot ?? teacherShot ?? undefined}
-              >
+              <video className="block w-full" autoPlay muted loop playsInline poster={teacherShot ?? adminShot ?? undefined}>
                 <source src={video} type={video.endsWith(".webm") ? "video/webm" : "video/mp4"} />
               </video>
+              <span className="absolute right-3 top-3 inline-flex items-center gap-1.5 rounded-full bg-kplc-navy/90 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-white backdrop-blur">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-kplc-green" /> Live demo
+              </span>
             </BrowserFrame>
             <p className="mt-4 text-center text-sm text-slate-500">Marking a class register, live — Present · Absent · Late in a tap.</p>
           </div>
-        ) : (
-          <div className="mt-12 grid items-start gap-6 lg:grid-cols-2">
-            <div>
-              <BrowserFrame address="iesr-register.vercel.app/admin">
-                <Shot src={adminShot} alt="IESR admin analytics dashboard" label="Admin dashboard" />
-              </BrowserFrame>
-              <p className="mt-3 text-center text-sm font-medium text-slate-600">Admin — analytics &amp; insights command centre</p>
-            </div>
-            <div>
-              <BrowserFrame address="iesr-register.vercel.app/teacher">
-                <Shot src={teacherShot} alt="IESR teacher marking register" label="Teacher register" />
-              </BrowserFrame>
-              <p className="mt-3 text-center text-sm font-medium text-slate-600">Trainer — the weekly marking grid</p>
-            </div>
-          </div>
         )}
+
+        {/* the two command surfaces, side by side */}
+        <div className="mt-10 grid items-start gap-6 lg:grid-cols-2">
+          <div>
+            <BrowserFrame address="iesr-register.vercel.app/admin">
+              <Shot src={adminShot} alt="IESR admin analytics dashboard" label="Admin dashboard" />
+            </BrowserFrame>
+            <p className="mt-3 text-center text-sm font-medium text-slate-600">Admin — analytics &amp; insights command centre</p>
+          </div>
+          <div>
+            <BrowserFrame address="iesr-register.vercel.app/teacher">
+              <Shot src={teacherShot} alt="IESR teacher marking register" label="Teacher register" />
+            </BrowserFrame>
+            <p className="mt-3 text-center text-sm font-medium text-slate-600">Trainer — the weekly marking grid</p>
+          </div>
+        </div>
       </div>
     </section>
   );
