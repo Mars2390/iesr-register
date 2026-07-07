@@ -9,6 +9,7 @@ import { LiveStats } from "@/components/landing/LiveStats";
 import { Gallery } from "@/components/landing/Gallery";
 import { RoleSwitcher } from "@/components/landing/RoleSwitcher";
 import { Showcase } from "@/components/landing/Showcase";
+import { Cohorts } from "@/components/landing/Cohorts";
 import { getPublicStats, getPublicClasses } from "@/lib/data/public";
 
 export const dynamic = "force-dynamic"; // real, live stats every request
@@ -259,65 +260,8 @@ export default async function LandingPage() {
         </div>
       </section>
 
-      {/* programmes — real IESR courses running on the register (no invented testimonials) */}
-      <section className="py-20 sm:py-28">
-        <div className="container-page">
-          <Reveal className="mx-auto max-w-2xl text-center">
-            <p className="eyebrow text-kplc-blue">Programmes</p>
-            <h2 className="mt-3 text-3xl font-bold sm:text-4xl">
-              {usingLiveClasses ? "Active cohorts on the register" : "Running live across every IESR programme"}
-            </h2>
-            <p className="mt-4 text-lg text-slate-600">
-              {usingLiveClasses
-                ? "These are the live classes marking attendance right now — pulled straight from the register, updated as cohorts start and finish."
-                : "From diploma cohorts to short professional courses, every session is marked, monitored and reported on the same register."}
-            </p>
-          </Reveal>
-
-          <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {programmes.map((p, i) => (
-              <Reveal key={`${p.tag}-${p.name}`} delay={(i % 3) * 0.06}>
-                <div className="group card h-full overflow-hidden transition hover:-translate-y-1 hover:border-kplc-blue/30 hover:shadow-lg">
-                  {/* preview: real register screenshot when available, else a branded IESR panel */}
-                  <div className="relative aspect-[16/10] overflow-hidden border-b border-slate-100">
-                    {p.shot ? (
-                      <>
-                        <Image src={p.shot} alt={`${p.tag} register`} fill sizes="(max-width:1024px) 100vw, 33vw" className="object-cover object-top transition duration-500 group-hover:scale-[1.03]" />
-                        {/* browser-chrome flourish so it reads as a live screenshot */}
-                        <div className="absolute left-3 top-3 flex gap-1.5">
-                          <span className="h-2 w-2 rounded-full bg-white/70" />
-                          <span className="h-2 w-2 rounded-full bg-white/70" />
-                          <span className="h-2 w-2 rounded-full bg-white/70" />
-                        </div>
-                      </>
-                    ) : (
-                      <div className="flex h-full items-center justify-center bg-gradient-to-br from-kplc-navy to-kplc-blue">
-                        <span className="relative h-16 w-16 overflow-hidden rounded-2xl ring-2 ring-white/25">
-                          <Image src="/images/iesr-4.jpg" alt="IESR" fill sizes="64px" className="object-cover" />
-                        </span>
-                      </div>
-                    )}
-                    <span className="absolute right-3 top-3 rounded-full bg-white/90 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-kplc-navy backdrop-blur">{p.tag}</span>
-                  </div>
-                  <div className="flex items-center gap-3 p-5">
-                    <span className="relative h-9 w-9 shrink-0 overflow-hidden rounded-lg ring-1 ring-slate-200">
-                      <Image src="/images/iesr-4.jpg" alt="IESR" fill sizes="36px" className="object-cover" />
-                    </span>
-                    <p className="min-w-0 truncate text-[15px] font-semibold leading-snug text-slate-800 group-hover:text-kplc-navy" title={p.name}>{p.name}</p>
-                  </div>
-                </div>
-              </Reveal>
-            ))}
-          </div>
-
-          <Reveal className="mt-10 text-center">
-            <p className="text-sm text-slate-500">
-              {usingLiveClasses && <span className="font-semibold text-slate-700">{programmes.length} active {programmes.length === 1 ? "cohort" : "cohorts"} · </span>}
-              Institute of Energy Studies &amp; Research · Kenya Power&apos;s training arm since <span className="font-semibold text-slate-700">1957</span>
-            </p>
-          </Reveal>
-        </div>
-      </section>
+      {/* programmes — flip-book of the live cohorts on the register */}
+      <Cohorts programmes={programmes} live={usingLiveClasses} />
 
       {/* CTA band */}
       <section className="relative overflow-hidden">
