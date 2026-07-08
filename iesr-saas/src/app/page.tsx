@@ -10,7 +10,8 @@ import { Gallery } from "@/components/landing/Gallery";
 import { RoleSwitcher } from "@/components/landing/RoleSwitcher";
 import { Showcase } from "@/components/landing/Showcase";
 import { Cohorts } from "@/components/landing/Cohorts";
-import { getPublicStats, getPublicClasses } from "@/lib/data/public";
+import { TimetableShowcase } from "@/components/landing/TimetableShowcase";
+import { getPublicStats, getPublicClasses, getPublicTimetable } from "@/lib/data/public";
 
 export const dynamic = "force-dynamic"; // real, live stats every request
 
@@ -73,7 +74,7 @@ const videoUrl = (): string | null => {
 };
 
 export default async function LandingPage() {
-  const [stats, classes] = await Promise.all([getPublicStats(), getPublicClasses()]);
+  const [stats, classes, timetable] = await Promise.all([getPublicStats(), getPublicClasses(), getPublicTimetable()]);
   // ALL active cohorts from the database — a newly-added class appears here
   // automatically. displayName is "CODE (Programme name)": surface the readable
   // programme as the title, the class code as the tag, plus any register screenshot.
@@ -235,6 +236,9 @@ export default async function LandingPage() {
 
       {/* who is it for — tabbed role switcher */}
       <RoleSwitcher adminImg={adminShot} />
+
+      {/* live timetable — active programmes & schedule */}
+      <TimetableShowcase initial={timetable} />
 
       {/* about / brand */}
       <section id="about" className="bg-kplc-navy py-20 text-white sm:py-28">

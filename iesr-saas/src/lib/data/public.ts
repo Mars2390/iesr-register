@@ -2,7 +2,7 @@
 // and the trainers attached to a class. Scoped to DEFAULT_SCHOOL_ID. No session.
 import { and, asc, eq, sql } from "drizzle-orm";
 import { db } from "@/db/client";
-import { classes, teachers, students, attendanceRecords } from "@/db/schema";
+import { classes, teachers, students, attendanceRecords, subjects, timetables } from "@/db/schema";
 import { formatDate } from "@/lib/dates";
 
 const schoolId = () => process.env.DEFAULT_SCHOOL_ID ?? "";
@@ -39,6 +39,49 @@ export async function getPublicClasses() {
     .from(classes)
     .where(and(eq(classes.schoolId, sid), eq(classes.active, true)))
     .orderBy(asc(classes.displayName));
+}
+
+/* ---------------------------------------------------------------- public timetable */
+const DAY_ORDER: Record<string, number> = { mon: 0, tue: 1, wed: 2, thu: 3, fri: 4, sat: 5, sun: 6 };
+
+export interface PublicSession { day: string; startTime: string; endTime: string; subject: string; teacher: string; }
+export interface PublicTimetableClass {
+  id: string; code: string; displayName: string; name: string; category: string;
+  sessions: PublicSession[];
+}
+
+/** Whole-school timetable for the landing page — active classes only, grouped by
+ *  class, joined to subject + lecturer names. No session (public). */
+export async function getPublicTimetable(): Promise<PublicTimetableClass[]> {
+  const sid = schoolId();
+  if (!sid) return [];
+  const rows = await db
+    .select({
+      classId: timetables.classId, code: classes.code, displayName: classes.displayName, category: classes.category,
+      day: timetables.day, startTime: timetables.startTime, endTime: timetables.endTime,
+      subject: subjects.name, teacher: teachers.name,
+    })
+    .from(timetables)
+    .innerJoin(classes, and(eq(classes.id, timetables.classId), eq(classes.active, true)))
+    .leftJoin(subjects, eq(subjects.id, timetables.subjectId))
+    .leftJoin(teachers, eq(teachers.id, timetables.teacherId))
+    .where(eq(timetables.schoolId, sid));
+
+  const map = new Map<string, PublicTimetableClass>();
+  for (const r of rows) {
+    let c = map.get(r.classId);
+    if (!c) {
+      const m = r.displayName.match(/\(([^)]+)\)\s*$/);
+      c = { id: r.classId, code: r.code, displayName: r.displayName, name: m ? m[1].trim() : r.displayName, category: r.category, sessions: [] };
+      map.set(r.classId, c);
+    }
+    c.sessions.push({ day: r.day, startTime: r.startTime, endTime: r.endTime, subject: r.subject ?? "General", teacher: r.teacher ?? "—" });
+  }
+  const list = [...map.values()];
+  for (const c of list) {
+    c.sessions.sort((a, b) => (DAY_ORDER[a.day] ?? 9) - (DAY_ORDER[b.day] ?? 9) || a.startTime.localeCompare(b.startTime));
+  }
+  return list.sort((a, b) => a.displayName.localeCompare(b.displayName));
 }
 
 export async function getPublicTeachers(classId: string) {
