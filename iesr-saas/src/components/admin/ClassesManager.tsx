@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Modal } from "@/components/ui/Modal";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 
 interface ClassRow { id: string; code: string; displayName: string; category: string; active: boolean; studentCount: number; }
 
@@ -12,6 +13,7 @@ export function ClassesManager({ initial }: { initial: ClassRow[] }) {
   const [form, setForm] = useState({ code: "", displayName: "", category: "Craft" });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const confirm = useConfirm();
 
   async function reload() {
     const r = await fetch("/api/admin/classes");
@@ -37,7 +39,7 @@ export function ClassesManager({ initial }: { initial: ClassRow[] }) {
   }
 
   async function toggle(c: ClassRow) {
-    if (c.active && !confirm(`Deactivate ${c.displayName}? Students and history are kept.`)) return;
+    if (c.active && !(await confirm({ tone: "danger", title: "Deactivate class", message: <>Deactivate <b>{c.displayName}</b>? Students and history are kept — you can reactivate it anytime.</>, confirmText: "Deactivate" }))) return;
     if (c.active) await fetch(`/api/admin/classes?id=${c.id}`, { method: "DELETE" });
     else await fetch("/api/admin/classes", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: c.id, active: true }) });
     await reload();

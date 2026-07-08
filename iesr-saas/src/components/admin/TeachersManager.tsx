@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Modal } from "@/components/ui/Modal";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 
 interface TeacherRow { id: string; name: string; classIds: string[]; active: boolean; }
 interface ClassOpt { id: string; displayName: string; }
@@ -14,6 +15,7 @@ export function TeachersManager({ initial, classes }: { initial: TeacherRow[]; c
   const [form, setForm] = useState<{ name: string; pin: string; classIds: string[] }>({ name: "", pin: "", classIds: [] });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const confirm = useConfirm();
 
   const classNames = (ids: string[]) =>
     ids.map((id) => classes.find((c) => c.id === id)?.displayName).filter(Boolean) as string[];
@@ -48,7 +50,7 @@ export function TeachersManager({ initial, classes }: { initial: TeacherRow[]; c
   }
 
   async function toggle(t: TeacherRow) {
-    if (t.active && !confirm(`Deactivate ${t.name}? They won't be able to sign in.`)) return;
+    if (t.active && !(await confirm({ tone: "danger", title: "Deactivate teacher", message: <>Deactivate <b>{t.name}</b>? They won&apos;t be able to sign in until reactivated.</>, confirmText: "Deactivate" }))) return;
     if (t.active) await fetch(`/api/admin/teachers?id=${t.id}`, { method: "DELETE" });
     else await fetch("/api/admin/teachers", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: t.id, active: true }) });
     await reload();

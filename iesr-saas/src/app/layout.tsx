@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
+import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
 
 // Self-hosted at build time by next/font (no runtime CDN, no layout shift).
 // Fetched once during `next build`. Inter (body) + Plus Jakarta Sans (display)
@@ -36,7 +37,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${sans.variable} ${display.variable}`}>
-      <body className="min-h-screen">{children}</body>
+      <body className="min-h-screen"><ConfirmProvider>{children}</ConfirmProvider></body>
     </html>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 
 interface Entry {
   id: string; classId: string; className: string | null; classCode: string | null;
@@ -29,6 +30,7 @@ export function TimetableManager({ initial, options }: { initial: Entry[]; optio
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const confirm = useConfirm();
 
   async function reload() {
     const r = await fetch("/api/admin/timetable", { cache: "no-store" });
@@ -62,7 +64,7 @@ export function TimetableManager({ initial, options }: { initial: Entry[]; optio
   }
 
   async function remove(e: Entry) {
-    if (!confirm(`Delete ${e.subjectName ?? "this slot"} (${DAYS.find((d) => d.key === e.day)?.label}, ${hhmm(e.startTime)})? This change reaches teachers immediately.`)) return;
+    if (!(await confirm({ tone: "danger", title: "Delete timetable slot", message: <>Delete <b>{e.subjectName ?? "this slot"}</b> ({DAYS.find((d) => d.key === e.day)?.label}, {hhmm(e.startTime)})? This change reaches teachers immediately.</>, confirmText: "Delete" }))) return;
     await fetch(`/api/admin/timetable?id=${e.id}`, { method: "DELETE" });
     await reload();
   }

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 
 interface StudentRow { id: string; admissionNo: string; fullName: string; classId: string | null; className: string | null; active: boolean; }
 interface ClassOpt { id: string; displayName: string; }
@@ -16,6 +17,7 @@ export function StudentsManager({ initial, classes }: { initial: StudentRow[]; c
   const [form, setForm] = useState({ admissionNo: "", fullName: "", classId: "" });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const confirm = useConfirm();
 
   const term = q.trim().toLowerCase();
   const filtered = useMemo(() => {
@@ -66,8 +68,8 @@ export function StudentsManager({ initial, classes }: { initial: StudentRow[]; c
   }
 
   async function toggle(s: StudentRow) {
-    if (s.active && !confirm(`Deactivate ${s.fullName}? Attendance history is kept.`)) return;
-    if (!s.active && !confirm(`Restore ${s.fullName} to the active roster?`)) return;
+    if (s.active && !(await confirm({ tone: "danger", title: "Deactivate student", message: <>Deactivate <b>{s.fullName}</b>? Attendance history is kept — you can restore them anytime.</>, confirmText: "Deactivate" }))) return;
+    if (!s.active && !(await confirm({ title: "Restore student", message: <>Restore <b>{s.fullName}</b> to the active roster?</>, confirmText: "Restore" }))) return;
     if (s.active) await fetch(`/api/admin/students?id=${s.id}`, { method: "DELETE" });
     else await fetch("/api/admin/students", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: s.id, active: true }) });
     await reload();

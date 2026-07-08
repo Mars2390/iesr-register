@@ -9,6 +9,7 @@ import {
   getSessionsForTeacherDate, cycleStatus, SUBMISSION_CODE,
 } from "@/lib/attendance";
 import { getMarkingWindow, type MarkingWindow } from "@/lib/validation";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import {
   getWeekDates, formatDate, formatDateDisplay, addDays, noon, timeToMinutes, WEEKDAY_LABELS,
 } from "@/lib/dates";
@@ -71,6 +72,7 @@ export function MarkingGrid({
   const [loadingWeek, setLoadingWeek] = useState(false);
   const [message, setMessage] = useState<Msg>(null);
   const [todayStr, setTodayStr] = useState("");
+  const confirm = useConfirm();
   const [now, setNow] = useState<Date | null>(null);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [noteDraft, setNoteDraft] = useState("");
@@ -162,8 +164,8 @@ export function MarkingGrid({
     setDirty(true);
   }
 
-  function clearDay() {
-    if (!confirm(`Clear all marks for ${WEEKDAY_LABELS[dayIndex]} ${dm(weekDates[dayIndex])} in the grid? (Press Update Register to persist.)`)) return;
+  async function clearDay() {
+    if (!(await confirm({ tone: "danger", title: "Clear day", confirmText: "Clear day", message: <>Clear all marks for <b>{WEEKDAY_LABELS[dayIndex]} {dm(weekDates[dayIndex])}</b> in the grid? Press <b>Update Register</b> afterwards to persist.</> }))) return;
     const dateStr = weekDates[dayIndex];
     const sessions = daySessions[dayIndex];
     setCells((prev) => {
@@ -176,8 +178,8 @@ export function MarkingGrid({
     setDirty(true);
   }
 
-  function clearWeek() {
-    if (!confirm("Clear all marks for this week in the grid? (Press Update Register to persist.)")) return;
+  async function clearWeek() {
+    if (!(await confirm({ tone: "danger", title: "Clear week", confirmText: "Clear week", message: <>Clear all marks for <b>this whole week</b> in the grid? Press <b>Update Register</b> afterwards to persist.</> }))) return;
     setCells((prev) => {
       let next = prev;
       for (let i = 0; i < 5; i++)
@@ -209,14 +211,14 @@ export function MarkingGrid({
     }
   }, [classInfo.id]);
 
-  function changeWeek(deltaWeeks: number) {
-    if (dirty && !confirm("You have unsaved changes. Switch week and discard the on-screen copy? (Your draft is kept locally.)")) return;
+  async function changeWeek(deltaWeeks: number) {
+    if (dirty && !(await confirm({ title: "Switch week?", confirmText: "Switch week", message: <>You have <b>unsaved changes</b>. Switch week and discard the on-screen copy? Your draft is kept locally.</> }))) return;
     loadWeek(formatDate(addDays(noon(weekStart), deltaWeeks * 7)));
   }
   // Jump to ANY date: load its week AND select that weekday.
-  function jumpToDate(value: string) {
+  async function jumpToDate(value: string) {
     if (!value) return;
-    if (dirty && weekStartOf(value) !== weekStart && !confirm("You have unsaved changes. Switch week? (Your draft is kept locally.)")) return;
+    if (dirty && weekStartOf(value) !== weekStart && !(await confirm({ title: "Switch week?", confirmText: "Switch week", message: <>You have <b>unsaved changes</b>. Switch week? Your draft is kept locally.</> }))) return;
     const ws = weekStartOf(value);
     setDayIndex(weekdayIndex(value));
     if (ws === weekStart) return; // same week — just moved the day cursor
@@ -225,7 +227,7 @@ export function MarkingGrid({
   function goToday() { jumpToDate(formatDate(new Date())); }
 
   async function submit(label = "Register updated") {
-    if (!confirm(`Submit this week's register to the cloud? (${summary.markedLessons} marked entries will be saved.)`)) return;
+    if (!(await confirm({ title: "Update register", confirmText: "Update register", message: <>Submit this week&apos;s register to the cloud? <b>{summary.markedLessons}</b> marked {summary.markedLessons === 1 ? "entry" : "entries"} will be saved.</> }))) return;
     setSaving(true); setMessage(null);
     try {
       const res = await fetch("/api/attendance", {
@@ -373,10 +375,10 @@ export function MarkingGrid({
   }
 
   /* ---------- flexible export (Weekly / Monthly / Custom) ---------- */
-  function runExport(label: string, from: string, to: string) {
+  async function runExport(label: string, from: string, to: string) {
     if (!from || !to) { setMessage({ type: "error", text: "Pick both a start and end date." }); return; }
     if (from > to) { setMessage({ type: "error", text: "Start date must be on or before the end date." }); return; }
-    if (!confirm(`Export the ${label} attendance CSV (${from} → ${to})?`)) return;
+    if (!(await confirm({ title: "Export CSV", confirmText: "Download CSV", message: <>Export the <b>{label}</b> attendance CSV ({from} → {to})?</> }))) return;
     const qs = new URLSearchParams({ classId: classInfo.id, from, to, label });
     const a = document.createElement("a");
     a.href = `/api/teacher/export?${qs.toString()}`;
@@ -482,7 +484,7 @@ export function MarkingGrid({
           <button onClick={() => setModal("tags")} className="btn-muted">Behavior Tags</button>
           <button onClick={openMomentum} className="btn-muted">Attendance Momentum</button>
           <button onClick={() => setModal("export")} className="btn-muted">Export CSV ▾</button>
-          <button onClick={() => { if (confirm("Open the print dialog for this register?")) window.print(); }} className="btn-muted">Print</button>
+          <button onClick={async () => { if (await confirm({ title: "Print register", confirmText: "Open print dialog", message: "Open the print dialog for this register?" })) window.print(); }} className="btn-muted">Print</button>
           <div className="ml-auto flex items-center gap-2">
             <button onClick={() => submit("Week saved")} disabled={saving || !dirty} className="btn-muted disabled:opacity-50">Save Week</button>
             <button onClick={() => submit("Register updated")} disabled={saving || !dirty} className="btn-primary px-5 py-2 text-sm">

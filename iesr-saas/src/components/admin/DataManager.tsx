@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 
 interface ParsedStudent { admissionNo: string; fullName: string; classCode: string }
 
@@ -25,10 +26,11 @@ function FreshStartCard() {
   const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const ask = useConfirm();
 
   async function run() {
     if (confirm !== "RESET") return;
-    if (!window.confirm("FRESH START: this permanently deletes ALL attendance records (roster is kept). Did you download the archive? Continue?")) return;
+    if (!(await ask({ tone: "danger", title: "Fresh start — delete all attendance", confirmText: "Delete all records", message: <>This <b>permanently deletes ALL attendance records</b> (the roster — students, teachers, classes, timetable — is kept). Have you downloaded the archive backup first? This cannot be undone.</> }))) return;
     setBusy(true); setMsg(null);
     try {
       const r = await fetch("/api/admin/data", {
@@ -72,6 +74,7 @@ function ImportCard() {
   const [parseErr, setParseErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ processed: number; errors: string[] } | null>(null);
+  const ask = useConfirm();
 
   function parse() {
     setResult(null); setParseErr(null);
@@ -96,7 +99,7 @@ function ImportCard() {
 
   async function submit() {
     if (!parsed) return;
-    if (!window.confirm(`Import ${parsed.length} students? Existing admission numbers will be updated.`)) return;
+    if (!(await ask({ title: "Import students", confirmText: `Import ${parsed.length}`, message: <>Import <b>{parsed.length}</b> student{parsed.length === 1 ? "" : "s"}? Existing admission numbers will be updated; new ones added.</> }))) return;
     setBusy(true); setResult(null);
     try {
       const r = await fetch("/api/admin/data", {
@@ -139,10 +142,11 @@ function ClearCard() {
   const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const ask = useConfirm();
 
   async function run() {
     if (confirm !== "DELETE") return;
-    if (!window.confirm("This permanently deletes ALL attendance records for the school. This cannot be undone. Continue?")) return;
+    if (!(await ask({ tone: "danger", title: "Delete all attendance records", confirmText: "Delete permanently", message: <>This <b>permanently deletes ALL attendance records</b> for the school. This <b>cannot be undone</b>. Continue?</> }))) return;
     setBusy(true); setMsg(null);
     try {
       const r = await fetch("/api/admin/data", {
