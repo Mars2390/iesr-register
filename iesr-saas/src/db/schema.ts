@@ -173,3 +173,28 @@ export const markingPresence = pgTable("marking_presence", {
   startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
   lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({ uq: unique().on(t.schoolId, t.teacherId, t.classId, t.date), bySeen: index("idx_presence_school_seen").on(t.schoolId, t.lastSeenAt) }));
+
+// ---- Automatic timetable generator ----
+// Per-teacher slot availability. Absence of a row = available; a row is an
+// explicit override (usually available:false marking a slot unavailable).
+export const teacherAvailability = pgTable("teacher_availability", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  schoolId: uuid("school_id").notNull().references(() => schools.id, { onDelete: "cascade" }),
+  teacherId: uuid("teacher_id").notNull().references(() => teachers.id, { onDelete: "cascade" }),
+  day: text("day").$type<DayValue>().notNull(),
+  slotIndex: integer("slot_index").notNull(),
+  available: boolean("available").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({ uq: unique().on(t.schoolId, t.teacherId, t.day, t.slotIndex), bySchool: index("idx_avail_school").on(t.schoolId) }));
+
+// Saved generated timetable snapshots (preview / export / restore).
+export const timetableVersions = pgTable("timetable_versions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  schoolId: uuid("school_id").notNull().references(() => schools.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  term: text("term").notNull().default(""),
+  sessionCount: integer("session_count").notNull().default(0),
+  data: jsonb("data").notNull().default({}),
+  applied: boolean("applied").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({ bySchool: index("idx_ttver_school").on(t.schoolId, t.createdAt) }));
