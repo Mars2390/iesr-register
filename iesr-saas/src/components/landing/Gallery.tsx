@@ -34,7 +34,12 @@ export function Gallery() {
     if (!t) return;
     const clamped = Math.max(0, Math.min(i, max));
     const child = t.children[clamped] as HTMLElement | undefined;
-    child?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+    if (!child) return;
+    // Scroll ONLY the horizontal track — never the page. scrollIntoView() would
+    // scroll every scrollable ancestor (incl. the window), which on mobile yanks
+    // the whole page down to the gallery while the user is still up in the hero.
+    const left = child.offsetLeft - (t.clientWidth - child.offsetWidth) / 2;
+    t.scrollTo({ left, behavior: "smooth" });
   }, [max]);
 
   // active = the slide whose centre is nearest the viewport centre
